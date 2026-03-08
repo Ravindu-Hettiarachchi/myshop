@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/utils/supabase/client';
-import { Clock, Store, Plus, Palette, Eye, Package } from 'lucide-react';
+import { Clock, Store, Plus, Palette, Eye, Package, AlertTriangle } from 'lucide-react';
 
 interface Shop {
     id: string;
@@ -25,6 +25,7 @@ export default function DashboardOverview() {
     const [userName, setUserName] = useState('');
     const [orderStats, setOrderStats] = useState<OrderStats>({ total: 0, processing: 0, revenue: 0 });
     const [lowStockCount, setLowStockCount] = useState(0);
+    const [lowStockProducts, setLowStockProducts] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
     const fetchData = useCallback(async () => {
@@ -64,10 +65,13 @@ export default function DashboardOverview() {
             // Get low stock products
             const { data: products } = await supabase
                 .from('products')
-                .select('stock_quantity, low_stock_threshold')
+                .select('id, title, stock_quantity, low_stock_threshold')
                 .eq('shop_id', shopData.id);
 
-            setLowStockCount((products || []).filter(p => p.stock_quantity <= p.low_stock_threshold).length);
+            const pList = products || [];
+            const lowStockItems = pList.filter(p => p.stock_quantity <= p.low_stock_threshold);
+            setLowStockCount(lowStockItems.length);
+            setLowStockProducts(lowStockItems.sort((a, b) => a.stock_quantity - b.stock_quantity));
         }
 
         setLoading(false);
@@ -146,17 +150,50 @@ export default function DashboardOverview() {
                     <p className="text-gray-500 text-sm font-medium">Low Stock Alerts</p>
                     <p className={`text-3xl font-black mt-2 ${lowStockCount > 0 ? 'text-red-600' : 'text-gray-900'}`}>{lowStockCount}</p>
                     {lowStockCount > 0 ? (
-                        <Link href="/dashboard/manage/products" className="text-xs text-red-600 font-medium mt-1 hover:underline block">Restock now →</Link>
+                        <Link href="/dashboard/products" className="text-xs text-red-600 font-medium mt-1 hover:underline block">Restock now →</Link>
                     ) : (
                         <p className="text-xs text-green-600 mt-1">All products stocked ✓</p>
                     )}
                 </div>
             </div>
 
+            {/* Smart Inventory Alerts Widget */}
+            {lowStockProducts.length > 0 && (
+                <div className="bg-red-50 border border-red-100 rounded-2xl p-6 shadow-sm">
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center text-red-600">
+                            <AlertTriangle className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-red-900 text-lg">Inventory Action Required</h3>
+                            <p className="text-red-700 text-sm">{lowStockProducts.length} items are running low or out of stock.</p>
+                        </div>
+                    </div>
+                    <div className="space-y-3">
+                        {lowStockProducts.slice(0, 3).map((product, idx) => (
+                            <div key={idx} className="bg-white border text-sm border-red-100 rounded-xl p-3 flex justify-between items-center shadow-sm">
+                                <div className="font-medium text-gray-900">{product.title}</div>
+                                <div className="flex items-center gap-3">
+                                    <span className={`px-2 py-1 rounded-md text-xs font-semibold ${product.stock_quantity === 0 ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>
+                                        {product.stock_quantity === 0 ? 'Out of Stock' : `${product.stock_quantity} Left`}
+                                    </span>
+                                    <Link href="/dashboard/products" className="text-blue-600 font-medium hover:underline text-xs">Manage</Link>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    {lowStockProducts.length > 3 && (
+                        <Link href="/dashboard/products" className="text-sm font-medium text-red-700 hover:text-red-900 mt-4 inline-block hover:underline">
+                            View all {lowStockProducts.length} alerts →
+                        </Link>
+                    )}
+                </div>
+            )}
+
             {/* Quick Actions */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 {[
-                    { label: 'Add Product', href: '/dashboard/manage/products', icon: Plus },
+                    { label: 'Add Product', href: '/dashboard/products', icon: Plus },
                     { label: 'Storefront Settings', href: '/dashboard/settings', icon: Palette },
                     { label: 'Preview Store', href: shop ? `/shop/${shop.route_path}` : '#', icon: Eye, external: true },
                     { label: 'View Orders', href: '#', icon: Package },

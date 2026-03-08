@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@/utils/supabase/client';
-import { Store, Check, Palette, Type, Settings, ExternalLink, UploadCloud, X } from 'lucide-react';
+import { Store, Palette, Type, Settings, ExternalLink, UploadCloud, X, ImageIcon } from 'lucide-react';
 
 const TEMPLATES = [
     {
@@ -55,6 +55,9 @@ interface ShopSettings {
     banner_url: string;
     logo_url: string;
     route_path: string;
+    company_address: string;
+    invoice_notes: string;
+    tax_rate: number;
 }
 
 export default function DashboardSettingsPage() {
@@ -66,7 +69,7 @@ export default function DashboardSettingsPage() {
     const [saved, setSaved] = useState(false);
     const [uploadingLogo, setUploadingLogo] = useState(false);
     const [uploadingBanner, setUploadingBanner] = useState(false);
-    const [activeSection, setActiveSection] = useState<'template' | 'branding' | 'colors'>('template');
+    const [activeTab, setActiveTab] = useState<'General' | 'Theme' | 'Invoice'>('General');
 
     const logoInputRef = useRef<HTMLInputElement>(null);
     const bannerInputRef = useRef<HTMLInputElement>(null);
@@ -92,6 +95,9 @@ export default function DashboardSettingsPage() {
                 footer_text: data.footer_text || '',
                 banner_url: data.banner_url || '',
                 logo_url: data.logo_url || '',
+                company_address: data.company_address || '',
+                invoice_notes: data.invoice_notes || '',
+                tax_rate: data.tax_rate || 0,
             });
         }
         setLoading(false);
@@ -116,7 +122,7 @@ export default function DashboardSettingsPage() {
         setTimeout(() => setSaved(false), 3000);
     };
 
-    const updateForm = (key: keyof ShopSettings, val: string) => {
+    const updateForm = (key: keyof ShopSettings, val: string | number) => {
         setForm(prev => ({ ...prev, [key]: val }));
     };
 
@@ -210,261 +216,240 @@ export default function DashboardSettingsPage() {
                 </button>
             </div>
 
-            {/* Tab Navigation */}
-            <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
-                {(['template', 'branding', 'colors'] as const).map(tab => (
+            {/* Tabs */}
+            <div className="flex items-center gap-6 border-b border-gray-100 mb-8 overflow-x-auto">
+                {['General', 'Theme', 'Invoice'].map((tab) => (
                     <button
                         key={tab}
-                        onClick={() => setActiveSection(tab)}
-                        className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all capitalize ${activeSection === tab ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'
-                            }`}
+                        onClick={() => setActiveTab(tab as any)}
+                        className={`pb-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === tab ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
                     >
-                        {tab === 'template' ? <span className="flex items-center justify-center gap-2"><Settings className="w-4 h-4" /> Template</span> :
-                            tab === 'branding' ? <span className="flex items-center justify-center gap-2"><Type className="w-4 h-4" /> Branding</span> :
-                                <span className="flex items-center justify-center gap-2"><Palette className="w-4 h-4" /> Colors & Fonts</span>}
+                        {tab} Settings
                     </button>
                 ))}
             </div>
 
-            {/* Section A: Template */}
-            {activeSection === 'template' && (
-                <div className="space-y-4">
-                    <h2 className="text-lg font-semibold text-gray-900">Choose a Template</h2>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {TEMPLATES.map(tmpl => (
-                            <button
-                                key={tmpl.id}
-                                onClick={() => updateForm('template', tmpl.id)}
-                                className={`relative p-5 rounded-xl border-2 text-left transition-all hover:shadow-md ${form.template === tmpl.id
-                                    ? 'border-blue-600 shadow-md bg-blue-50'
-                                    : 'border-gray-200 hover:border-gray-300 bg-white'
-                                    }`}
-                            >
-                                {form.template === tmpl.id && (
-                                    <span className="absolute top-3 right-3 bg-blue-600 text-white text-xs px-2 py-1 rounded-full font-medium">
-                                        Active
-                                    </span>
-                                )}
-                                <div className={`w-12 h-12 rounded-lg mb-3 ${tmpl.preview}`} />
-                                <h3 className="font-bold text-gray-900 mb-1">{tmpl.name}</h3>
-                                <p className="text-sm text-gray-500">{tmpl.description}</p>
-                                <div className="flex gap-1.5 mt-3">
-                                    {tmpl.colors.map(c => (
-                                        <div key={c} style={{ backgroundColor: c }} className="w-5 h-5 rounded-full border border-white shadow-sm" />
-                                    ))}
-                                </div>
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            )}
+            <div className="space-y-8 max-w-3xl">
+                {activeTab === 'General' && (
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 lg:p-8 space-y-6">
 
-            {/* Section B: Branding */}
-            {activeSection === 'branding' && (
-                <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
-                    <h2 className="text-lg font-semibold text-gray-900">Branding & Content</h2>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1.5">Shop Tagline</label>
-                            <input
-                                type="text"
-                                value={form.tagline || ''}
-                                onChange={(e) => updateForm('tagline', e.target.value)}
-                                placeholder="e.g. Fresh from the spice garden..."
-                                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                            />
-                            <p className="text-xs text-gray-400 mt-1">Displayed beneath your shop name in the hero section.</p>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1.5">Announcement Bar</label>
-                            <input
-                                type="text"
-                                value={form.announcement_bar || ''}
-                                onChange={(e) => updateForm('announcement_bar', e.target.value)}
-                                placeholder="e.g. Free delivery over Rs. 5000!"
-                                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                            />
-                            <p className="text-xs text-gray-400 mt-1">Shows a colored strip at the very top of your storefront.</p>
-                        </div>
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Footer Message</label>
-                        <input
-                            type="text"
-                            value={form.footer_text || ''}
-                            onChange={(e) => updateForm('footer_text', e.target.value)}
-                            placeholder="e.g. © 2025 Ceylon Spice House. All rights reserved."
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                        />
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1.5">Shop Logo</label>
-
-                            {form.logo_url ? (
-                                <div className="relative w-32 h-32 mb-3 bg-gray-50 border border-gray-200 rounded-xl overflow-hidden flex items-center justify-center">
-                                    <img src={form.logo_url} alt="Logo" className="max-w-full max-h-full object-contain p-2" />
-                                    <button
-                                        onClick={() => updateForm('logo_url', '')}
-                                        className="absolute top-1 right-1 bg-white p-1 rounded-full text-red-500 shadow hover:bg-red-50"
-                                        title="Remove Logo"
-                                    >
-                                        <X className="w-4 h-4" />
-                                    </button>
+                            <h3 className="text-lg font-bold text-gray-900 mb-4">Shop Logo & Banner</h3>
+                            <div className="flex flex-col sm:flex-row gap-6 items-start">
+                                {/* Logo Box */}
+                                <div className="space-y-3">
+                                    <label className="block text-sm font-medium text-gray-700">Logo</label>
+                                    <div className="w-32 h-32 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center gap-2 relative overflow-hidden group">
+                                        {form.logo_url ? (
+                                            <>
+                                                <img src={form.logo_url} alt="Logo" className="w-full h-full object-contain p-2" />
+                                                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                    <label className="cursor-pointer bg-white text-gray-900 p-2 rounded-full shadow hover:scale-105 transition">
+                                                        <ImageIcon className="w-4 h-4" />
+                                                        <input type="file" className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'logo')} disabled={uploadingLogo} />
+                                                    </label>
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <label className="cursor-pointer flex flex-col items-center w-full h-full justify-center text-gray-400 hover:text-blue-600 transition">
+                                                {uploadingLogo ? <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" /> : <>
+                                                    <UploadCloud className="w-6 h-6 mb-2" />
+                                                    <span className="text-xs font-medium">Upload Logo</span>
+                                                </>}
+                                                <input type="file" className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'logo')} disabled={uploadingLogo} />
+                                            </label>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs text-gray-400">Or URL:</span>
+                                        <input
+                                            type="url"
+                                            value={form.logo_url || ''}
+                                            onChange={(e) => updateForm('logo_url', e.target.value)}
+                                            placeholder="https://..."
+                                            className="flex-1 border border-gray-300 rounded-md px-2 py-1 text-xs outline-none"
+                                        />
+                                    </div>
                                 </div>
-                            ) : (
-                                <div
-                                    onClick={() => logoInputRef.current?.click()}
-                                    className="w-32 h-32 mb-3 border-2 border-dashed border-gray-300 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition flex flex-col items-center justify-center cursor-pointer text-gray-500 hover:text-blue-600"
-                                >
-                                    {uploadingLogo ? (
-                                        <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                                    ) : (
-                                        <>
-                                            <UploadCloud className="w-6 h-6 mb-2" />
-                                            <span className="text-xs font-medium">Upload Logo</span>
-                                        </>
-                                    )}
+
+                                {/* Banner Box */}
+                                <div className="space-y-3 flex-1 flex-col flex">
+                                    <label className="block text-sm font-medium text-gray-700">Cover Banner</label>
+                                    <div className="w-full h-32 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200 flex items-center justify-center relative overflow-hidden group">
+                                        {form.banner_url ? (
+                                            <>
+                                                <img src={form.banner_url} alt="Banner" className="w-full h-full object-cover opacity-80" />
+                                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                    <label className="cursor-pointer bg-white text-gray-900 px-4 py-2 rounded-lg text-sm font-medium shadow hover:scale-105 transition flex items-center gap-2">
+                                                        <UploadCloud className="w-4 h-4" /> Change Banner
+                                                        <input type="file" className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'banner')} disabled={uploadingBanner} />
+                                                    </label>
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <label className="cursor-pointer flex flex-col items-center justify-center w-full h-full text-gray-400 hover:text-blue-600 transition">
+                                                {uploadingBanner ? <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" /> : <>
+                                                    <ImageIcon className="w-6 h-6 mb-2" />
+                                                    <span className="text-xs font-medium">Upload Cover Image</span>
+                                                </>}
+                                                <input type="file" className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'banner')} disabled={uploadingBanner} />
+                                            </label>
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-gray-400 mt-2">Recommended: 1200x400px</p>
                                 </div>
-                            )}
-
-                            <input
-                                type="file"
-                                ref={logoInputRef}
-                                onChange={(e) => handleFileUpload(e, 'logo')}
-                                accept="image/*"
-                                className="hidden"
-                            />
-
-                            <div className="flex items-center gap-2">
-                                <span className="text-xs text-gray-400">Or use URL:</span>
-                                <input
-                                    type="url"
-                                    value={form.logo_url || ''}
-                                    onChange={(e) => updateForm('logo_url', e.target.value)}
-                                    placeholder="https://example.com/logo.png"
-                                    className="flex-1 border border-gray-300 rounded-md px-2 py-1.5 text-xs focus:ring-1 focus:ring-blue-500 focus:border-transparent outline-none"
-                                />
                             </div>
                         </div>
 
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1.5">Hero Banner Image</label>
-
-                            {form.banner_url ? (
-                                <div className="relative w-full h-32 mb-3 bg-gray-50 border border-gray-200 rounded-xl overflow-hidden flex items-center justify-center">
-                                    <img src={form.banner_url} alt="Banner" className="w-full h-full object-cover" />
-                                    <button
-                                        onClick={() => updateForm('banner_url', '')}
-                                        className="absolute top-2 right-2 bg-white p-1 rounded-full text-red-500 shadow hover:bg-red-50"
-                                        title="Remove Banner"
-                                    >
-                                        <X className="w-4 h-4" />
-                                    </button>
-                                </div>
-                            ) : (
-                                <div
-                                    onClick={() => bannerInputRef.current?.click()}
-                                    className="w-full h-32 mb-3 border-2 border-dashed border-gray-300 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition flex flex-col items-center justify-center cursor-pointer text-gray-500 hover:text-blue-600"
-                                >
-                                    {uploadingBanner ? (
-                                        <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                                    ) : (
-                                        <>
-                                            <UploadCloud className="w-6 h-6 mb-2" />
-                                            <span className="text-xs font-medium">Upload Hero Banner</span>
-                                            <span className="text-xs text-gray-400 mt-1">Recommended: 1920x600px</span>
-                                        </>
-                                    )}
-                                </div>
-                            )}
-
-                            <input
-                                type="file"
-                                ref={bannerInputRef}
-                                onChange={(e) => handleFileUpload(e, 'banner')}
-                                accept="image/*"
-                                className="hidden"
-                            />
-
-                            <div className="flex items-center gap-2">
-                                <span className="text-xs text-gray-400">Or use URL:</span>
-                                <input
-                                    type="url"
-                                    value={form.banner_url || ''}
-                                    onChange={(e) => updateForm('banner_url', e.target.value)}
-                                    placeholder="https://example.com/banner.jpg"
-                                    className="flex-1 border border-gray-300 rounded-md px-2 py-1.5 text-xs focus:ring-1 focus:ring-blue-500 focus:border-transparent outline-none"
-                                />
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Section C: Colors & Fonts */}
-            {activeSection === 'colors' && (
-                <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
-                    <h2 className="text-lg font-semibold text-gray-900">Colors & Typography</h2>
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-3">Primary Color</label>
-                        <div className="flex items-center gap-4 flex-wrap">
-                            {['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#6366F1', '#14B8A6', '#F97316', '#D97706'].map(c => (
-                                <button
-                                    key={c}
-                                    onClick={() => updateForm('primary_color', c)}
-                                    style={{ backgroundColor: c }}
-                                    className={`w-9 h-9 rounded-full border-4 transition-all ${form.primary_color === c ? 'border-gray-900 scale-110' : 'border-white shadow-md hover:scale-105'
-                                        }`}
-                                />
-                            ))}
-                            <div className="flex items-center gap-2 ml-2">
-                                <label className="text-sm text-gray-500">Custom:</label>
-                                <input
-                                    type="color"
-                                    value={form.primary_color || '#3B82F6'}
-                                    onChange={(e) => updateForm('primary_color', e.target.value)}
-                                    className="w-9 h-9 rounded-full border-2 border-gray-200 cursor-pointer overflow-hidden"
-                                />
-                            </div>
-                        </div>
-                        <div className="mt-3 flex items-center gap-3">
-                            <div style={{ backgroundColor: form.primary_color || '#3B82F6' }} className="w-10 h-10 rounded-lg" />
+                        <div className="border-t border-gray-100 pt-6 space-y-4">
                             <div>
-                                <p className="text-sm font-medium text-gray-900">Current: {form.primary_color}</p>
-                                <p className="text-xs text-gray-400">Used for buttons, accents, and highlights across your storefront.</p>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Tagline</label>
+                                <input
+                                    type="text"
+                                    value={form.tagline || ''}
+                                    onChange={(e) => updateForm('tagline', e.target.value)}
+                                    placeholder="e.g., Premium spices sourced directly from local farmers."
+                                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Top Announcement Bar</label>
+                                <input
+                                    type="text"
+                                    value={form.announcement_bar || ''}
+                                    onChange={(e) => updateForm('announcement_bar', e.target.value)}
+                                    placeholder="e.g., Free delivery islandwide for orders above Rs. 5000!"
+                                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Footer Text</label>
+                                <textarea
+                                    value={form.footer_text || ''}
+                                    onChange={(e) => updateForm('footer_text', e.target.value)}
+                                    placeholder="e.g., Copyright 2026. Returns accepted within 7 days."
+                                    rows={2}
+                                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition resize-none"
+                                />
+                            </div>
+                        </div>
+
+                    </div>
+                )}
+
+                {activeTab === 'Theme' && (
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 lg:p-8 space-y-8">
+                        <div>
+                            <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                                <Palette className="text-gray-400 w-5 h-5" /> Base Template
+                            </h3>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                {TEMPLATES.map(t => (
+                                    <div
+                                        key={t.id}
+                                        onClick={() => updateForm('template', t.id)}
+                                        className={`cursor-pointer rounded-xl border-2 p-4 transition-all flex flex-col items-center justify-center gap-3 ${form.template === t.id ? 'border-blue-600 bg-blue-50/30' : 'border-gray-100 hover:border-blue-200 bg-gray-50/50'}`}
+                                    >
+                                        <div className="text-center">
+                                            <p className="font-semibold text-gray-900 text-sm">{t.name}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="border-t border-gray-100 pt-6">
+                            <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                                <Type className="text-gray-400 w-5 h-5" /> Typography & Color
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Primary Color (Hex)</label>
+                                    <div className="flex items-center gap-3">
+                                        <input
+                                            type="color"
+                                            value={form.primary_color || '#3B82F6'}
+                                            onChange={(e) => updateForm('primary_color', e.target.value)}
+                                            className="w-10 h-10 rounded-lg cursor-pointer border-none bg-transparent"
+                                        />
+                                        <input
+                                            type="text"
+                                            value={form.primary_color || '#3B82F6'}
+                                            onChange={(e) => updateForm('primary_color', e.target.value)}
+                                            className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition font-mono"
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Heading Font Lineage</label>
+                                    <select
+                                        value={form.font || 'Inter'}
+                                        onChange={(e) => updateForm('font', e.target.value)}
+                                        className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition appearance-none bg-white"
+                                    >
+                                        <option value="Inter">Inter (Sans-Serif)</option>
+                                        <option value="serif">Playfair (Serif)</option>
+                                        <option value="mono">Space Mono (Monospace)</option>
+                                    </select>
+                                </div>
                             </div>
                         </div>
                     </div>
+                )}
 
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-3">Font Family</label>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                            {FONTS.map(font => (
-                                <button
-                                    key={font.id}
-                                    onClick={() => updateForm('font', font.id)}
-                                    className={`p-4 rounded-xl border-2 text-left transition-all ${form.font === font.id
-                                        ? 'border-blue-600 bg-blue-50'
-                                        : 'border-gray-200 hover:border-gray-300 bg-white'
-                                        }`}
-                                >
-                                    <p className={`text-lg ${font.style} font-bold text-gray-900`}>{font.name}</p>
-                                    <p className={`text-xs text-gray-500 ${font.style} mt-1`}>The quick brown fox</p>
-                                    {form.font === font.id && <span className="text-xs text-blue-600 font-medium block mt-1">Selected ✓</span>}
-                                </button>
-                            ))}
+                {activeTab === 'Invoice' && (
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 lg:p-8 space-y-6">
+                        <div>
+                            <h3 className="text-lg font-bold text-gray-900 mb-4">Invoice PDF Configuration</h3>
+                            <p className="text-sm text-gray-500 mb-6">Customize the information appearing on automated customer receipts and PDF invoices.</p>
+
+                            <div className="space-y-4 text-sm">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="md:col-span-2">
+                                        <label className="block text-gray-700 font-medium mb-1.5">Company Operating Address</label>
+                                        <textarea
+                                            value={form.company_address || ''}
+                                            onChange={(e) => updateForm('company_address', e.target.value)}
+                                            placeholder="123 Example Street, Colombo 03, Sri Lanka"
+                                            rows={3}
+                                            className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition resize-none"
+                                        />
+                                    </div>
+
+                                    <div className="md:col-span-2">
+                                        <label className="block text-gray-700 font-medium mb-1.5">Invoice Notes / Legal Text</label>
+                                        <textarea
+                                            value={form.invoice_notes || ''}
+                                            onChange={(e) => updateForm('invoice_notes', e.target.value)}
+                                            placeholder="Thank you for your business. Terms and conditions apply."
+                                            rows={2}
+                                            className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition resize-none"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-gray-700 font-medium mb-1.5 flex justify-between">
+                                            <span>Default Tax Rate (%)</span>
+                                        </label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            value={form.tax_rate || 0}
+                                            onChange={(e) => updateForm('tax_rate', parseFloat(e.target.value) || 0)}
+                                            placeholder="18.00"
+                                            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )}
+
+            </div>
 
             {/* Live Preview Link */}
-            <div className="bg-blue-50 border border-blue-100 rounded-xl p-5 flex items-center justify-between">
+            <div className="bg-blue-50 border border-blue-100 rounded-xl p-5 flex items-center justify-between mt-8 max-w-3xl">
                 <div>
                     <p className="text-sm font-semibold text-blue-900">Preview Your Storefront</p>
                     <p className="text-xs text-blue-600 mt-0.5">Remember to save changes before previewing!</p>

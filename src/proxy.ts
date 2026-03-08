@@ -85,17 +85,23 @@ export async function proxy(request: NextRequest) {
         const subdomain = hostname.replace(`.${rootDomain}`, '');
 
         // Prevent rewriting internal Next.js paths or API routes if they accidentally hit a subdomain
-        if (!path.startsWith('/api') && !path.startsWith('/_next') && path === '/') {
-            // Rewrite mapping the root of the subdomain to the dynamic shop route
-            const url = request.nextUrl.clone();
-            url.pathname = `/shop/${subdomain}`;
-            return NextResponse.rewrite(url);
-        }
+        if (!path.startsWith('/api') && !path.startsWith('/_next')) {
 
-        // If a path is specified on the subdomain (e.g. shopname.myshop.com/about)
-        // You could theoretically rewrite to `/shop/[slug]/[path]` if your app supported it.
-        // For now, we just redirect back to the shop root if they hit an unknown path on the subdomain
-        if (path !== '/') {
+            if (path === '/') {
+                // Rewrite mapping the root of the subdomain to the dynamic shop route
+                const url = request.nextUrl.clone();
+                url.pathname = `/shop/${subdomain}`;
+                return NextResponse.rewrite(url);
+            }
+
+            // Allow explicit authentication paths on the subdomain for customers
+            if (path.startsWith('/login') || path.startsWith('/signup')) {
+                const url = request.nextUrl.clone();
+                url.pathname = `/shop/${subdomain}${path}`;
+                return NextResponse.rewrite(url);
+            }
+
+            // Fallback: Redirect unrecognized paths back to root of shop
             const url = request.nextUrl.clone();
             url.pathname = `/shop/${subdomain}`;
             return NextResponse.rewrite(url);

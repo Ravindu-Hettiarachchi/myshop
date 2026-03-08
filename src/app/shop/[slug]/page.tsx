@@ -1,27 +1,11 @@
 import { createClient } from '@/utils/supabase/server';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import MinimalWhite from '@/components/storefronts/MinimalWhite';
-import ModernDark from '@/components/storefronts/ModernDark';
-import VibrantMarket from '@/components/storefronts/VibrantMarket';
-import ElegantBoutique from '@/components/storefronts/ElegantBoutique';
+import StorefrontClient from '@/components/shop/StorefrontClient';
 import { Clock, Eye, Edit2, ArrowLeft } from 'lucide-react';
 
 interface Props {
     params: Promise<{ slug: string }>;
-}
-
-function renderTemplate(template: string, shopConfig: object, productList: object[]) {
-    switch (template) {
-        case 'modern-dark':
-            return <ModernDark shop={shopConfig as Parameters<typeof ModernDark>[0]['shop']} products={productList as Parameters<typeof ModernDark>[0]['products']} />;
-        case 'vibrant-market':
-            return <VibrantMarket shop={shopConfig as Parameters<typeof VibrantMarket>[0]['shop']} products={productList as Parameters<typeof VibrantMarket>[0]['products']} />;
-        case 'elegant-boutique':
-            return <ElegantBoutique shop={shopConfig as Parameters<typeof ElegantBoutique>[0]['shop']} products={productList as Parameters<typeof ElegantBoutique>[0]['products']} />;
-        default:
-            return <MinimalWhite shop={shopConfig as Parameters<typeof MinimalWhite>[0]['shop']} products={productList as Parameters<typeof MinimalWhite>[0]['products']} />;
-    }
 }
 
 export default async function ShopPage({ params }: Props) {
@@ -86,7 +70,11 @@ export default async function ShopPage({ params }: Props) {
         .order('created_at', { ascending: false });
 
     const shopConfig = {
+        id: shop.id,
         shop_name: shop.shop_name,
+        route_path: shop.route_path,
+        template: shop.template || 'minimal-white',
+        tax_rate: shop.tax_rate,
         tagline: shop.tagline || null,
         primary_color: shop.primary_color || '#3B82F6',
         font: shop.font || 'Inter',
@@ -130,11 +118,11 @@ export default async function ShopPage({ params }: Props) {
                 </div>
 
                 {/* Actual Storefront (fully rendered, just not public) */}
-                {renderTemplate(shop.template, shopConfig, productList)}
+                <StorefrontClient routePath={slug} shopConfig={shopConfig as any} productList={productList} sessionUserInit={user} />
             </div>
         );
     }
 
     // Fully live shop — render without any banner
-    return renderTemplate(shop.template, shopConfig, productList);
+    return <StorefrontClient routePath={slug} shopConfig={shopConfig as any} productList={productList} sessionUserInit={user} />;
 }

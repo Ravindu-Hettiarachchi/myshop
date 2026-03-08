@@ -2,12 +2,14 @@ import React from 'react';
 
 interface PlatformLogoProps {
     /** 
-     * 'full' uses logo-ver.png (larger, with text)
-     * 'icon' uses logo.png (smaller, just the icon)
+     * 'full' uses logo-ver.png (with text)
+     * 'icon' uses logo.png (icon only)
      */
     variant?: 'full' | 'icon';
     /**
-     * Additional Tailwind classes (e.g. for grayscale or margins)
+     * Override class. If provided, replaces the default size completely.
+     * Example: className="h-8 w-auto" to set a specific height.
+     * If omitted, uses the defaults below.
      */
     className?: string;
 }
@@ -15,16 +17,17 @@ interface PlatformLogoProps {
 export default function PlatformLogo({ variant = 'full', className }: PlatformLogoProps) {
 
     // --- 🛠️ ADJUST GLOBAL LOGO SIZES HERE 🛠️ ---
-    // Change the "h-XX" values below to adjust the logo size everywhere at once!
-    const defaultFullSize = "h-32 w-auto"; // Used on Landing page, Login, Signup (Increased from h-24 to h-32)
-    const defaultIconSize = "h-14 w-auto"; // Used on Dashboard & Admin sidebars (Increased from h-10 to h-14)
+    const defaultFullClass = 'h-10 w-auto object-contain';
+    const defaultIconClass = 'h-8 w-auto object-contain';
 
     const src = variant === 'full' ? '/logo-ver.png' : '/logo.png';
-    const baseClass = variant === 'full' ? defaultFullSize : defaultIconSize;
 
-    const finalClassName = className ? `${baseClass} ${className}` : baseClass;
+    // When caller passes className, use it exclusively so no h-XX conflict occurs.
+    const finalClass = className
+        ? `w-auto object-contain ${className}`  // ensure aspect-ratio is always preserved
+        : (variant === 'full' ? defaultFullClass : defaultIconClass);
 
     return (
-        <img src={src} alt="MyShop Platform" className={finalClassName} />
+        <img src={src} alt="MyShop Platform" className={finalClass} />
     );
 }

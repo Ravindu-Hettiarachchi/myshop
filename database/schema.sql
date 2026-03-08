@@ -31,6 +31,10 @@ CREATE TABLE shops (
     logo_url TEXT,                                 -- Shop logo image URL
     announcement_bar TEXT,                         -- Top announcement bar text
     footer_text TEXT,                              -- Footer message
+    -- Invoice Generation Customization Fields
+    company_address TEXT,                          -- Address shown on PDF invoices
+    invoice_notes TEXT,                            -- Custom notes/terms shown on invoices
+    tax_rate DECIMAL(5, 2) DEFAULT 0.00,           -- Tax rate percentage applied to orders
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -61,6 +65,16 @@ CREATE TABLE orders (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- 5. Order Items Table (Line items for each order)
+CREATE TABLE order_items (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    order_id UUID REFERENCES orders(id) ON DELETE CASCADE,
+    product_id UUID REFERENCES products(id) ON DELETE SET NULL, -- Prevent order corruption if product deleted
+    quantity INTEGER NOT NULL CHECK (quantity > 0),
+    unit_price DECIMAL(10, 2) NOT NULL, -- Captured at time of sale (in case product price changes later)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 ---------------------------------------------------------------------------------
 -- Row Level Security (RLS) Policies
 ---------------------------------------------------------------------------------
@@ -70,6 +84,7 @@ ALTER TABLE owners ENABLE ROW LEVEL SECURITY;
 ALTER TABLE shops ENABLE ROW LEVEL SECURITY;
 ALTER TABLE products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE order_items ENABLE ROW LEVEL SECURITY;
 
 -- 1. Owners Table Policies
 CREATE POLICY "Admins can manage all owners" ON owners
@@ -117,6 +132,19 @@ CREATE POLICY "Shop owners can view shop orders" ON orders
 CREATE POLICY "Customers can insert orders" ON orders
     FOR INSERT WITH CHECK (true);
 
+-- 5. Order Items Table Policies
+CREATE POLICY "Shop owners can view shop order items" ON order_items
+    FOR SELECT USING (
+        EXISTS (
+            SELECT 1 FROM orders 
+            JOIN shops ON shops.id = orders.shop_id 
+            WHERE orders.id = order_items.order_id AND (shops.owner_id = auth.uid() OR EXISTS (SELECT 1 FROM owners WHERE id = auth.uid() AND role = 'admin'))
+        )
+    );
+
+CREATE POLICY "Customers can insert order items" ON order_items
+    FOR INSERT WITH CHECK (true);
+
 ---------------------------------------------------------------------------------
 -- Example Seed Data reflecting Sri Lankan market aesthetics
 ---------------------------------------------------------------------------------
@@ -147,7 +175,26 @@ INSERT INTO products (shop_id, title, description, price, stock_quantity, low_st
 --   ADD COLUMN IF NOT EXISTS banner_url TEXT,
 --   ADD COLUMN IF NOT EXISTS logo_url TEXT,
 --   ADD COLUMN IF NOT EXISTS announcement_bar TEXT,
---   ADD COLUMN IF NOT EXISTS footer_text TEXT;
+--   ADD COLUMN IF NOT EXISTS footer_text TEXT,
+--   ADD COLUMN IF NOT EXISTS company_address TEXT,
+--   ADD COLUMN IF NOT EXISTS invoice_notes TEXT,
+--   ADD COLUMN IF NOT EXISTS tax_rate DECIMAL(5, 2) DEFAULT 0.00;
+--
+-- ALTER TABLE products
+--   ADD COLUMN IF NOT EXISTS stock_quantity INTEGER DEFAULT 0,
+--   ADD COLUMN IF NOT EXISTS low_stock_threshold INTEGER DEFAULT 5;
+--
+-- CREATE TABLE IF NOT EXISTS order_items (
+--     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+--     order_id UUID REFERENCES orders(id) ON DELETE CASCADE,
+--     product_id UUID REFERENCES products(id) ON DELETE SET NULL,
+--     quantity INTEGER NOT NULL CHECK (quantity > 0),
+--     unit_price DECIMAL(10, 2) NOT NULL,
+--     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+-- );
+-- ALTER TABLE order_items ENABLE ROW LEVEL SECURITY;
+-- CREATE POLICY "Shop owners can view shop order items" ON order_items FOR SELECT USING (EXISTS (SELECT 1 FROM orders JOIN shops ON shops.id = orders.shop_id WHERE orders.id = order_items.order_id AND (shops.owner_id = auth.uid() OR EXISTS (SELECT 1 FROM owners WHERE id = auth.uid() AND role = 'admin'))));
+-- CREATE POLICY "Customers can insert order items" ON order_items FOR INSERT WITH CHECK (true);
 
 ---------------------------------------------------------------------------------
 -- Storage Buckets Setup (Logos & Banners)
