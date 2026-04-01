@@ -1,159 +1,355 @@
-import { createClient } from '@/utils/supabase/server';
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Package, Truck, CheckCircle, Store, Receipt } from 'lucide-react';
+import { createClient } from '@/utils/supabase/client';
+import { Package, Truck, CheckCircle, Store, Receipt, Clock, Box, MapPin, Mail, Phone, AlertCircle, RefreshCw, ExternalLink } from 'lucide-react';
 
-export const revalidate = 0; // Fresh fetch for accurate order status
+const STEPS = [
+    { id: 'processing', label: 'Processing', sub: 'Order received, being prepared', Icon: Clock },
+    { id: 'packed',     label: 'Packed',     sub: 'Packed and ready to ship', Icon: Box },
+    { id: 'shipped',    label: 'Shipped',    sub: 'On the way to you', Icon: Truck },
+    { id: 'delivered',  label: 'Delivered',  sub: 'Successfully delivered', Icon: CheckCircle },
+];
 
-export default async function OrderStatusPage({ params }: { params: Promise<{ slug: string, id: string }> }) {
-    const { slug, id } = await params;
-    const supabase = await createClient();
+const STATUS_COLOR: Record<string, { ring: string; bg: string; text: string }> = {
+    processing: { ring: 'ring-amber-400',  bg: 'bg-amber-500',   text: 'text-amber-600' },
+    packed:     { ring: 'ring-violet-400', bg: 'bg-violet-500',  text: 'text-violet-600' },
+    shipped:    { ring: 'ring-blue-400',   bg: 'bg-blue-500',    text: 'text-blue-600' },
+    delivered:  { ring: 'ring-emerald-400',bg: 'bg-emerald-500', text: 'text-emerald-600' },
+    cancelled:  { ring: 'ring-red-400',    bg: 'bg-red-500',     text: 'text-red-600' },
+};
 
-    // 1. Verify Shop
-    const { data: shop } = await supabase.from('shops').select('*').eq('route_path', slug).single();
-    if (!shop) return <div className="p-8 text-center">Store not found</div>;
+export default function OrderTrackerPage({ params }: { params: Promise<{ slug: string; id: string }> }) {
+    const supabase = createClient();
+    const [order, setOrder] = useState<any>(null);
+    const [shop, setShop] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
+    const [slug, setSlug] = useState('');
+    const [orderId, setOrderId] = useState('');
+    const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
+    const [refreshing, setRefreshing] = useState(false);
+    const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-    // 2. Fetch Order with Items and Products
-    const { data: order } = await supabase
-        .from('orders')
-        .select(`
-            *,
-            order_items (
-                quantity,
-                unit_price,
-                products ( title, image_urls )
-            )
-        `)
-        .eq('id', id)
-        .eq('shop_id', shop.id)
-        .single();
+    useEffect(() => {
+        params.then(({ slug, id }) => {
+            setSlug(slug);
+            setOrderId(id);
+            load(slug, id);
+        });
+    }, []);
 
-    if (!order) {
+    const load = async (s: string, id: string, isRefresh = false) => {
+        if (isRefresh) setRefreshing(true);
+        const { data: shopData } = await supabase
+            .from('shops')
+            .select('*, primary_color')
+            .eq('route_path', s)
+            .single();
+        if (!shopData) { setLoading(false); return; }
+        setShop(shopData);
+
+        const { data: orderData } = await supabase
+            .from('orders')
+            .select(`*, order_items(quantity, unit_price, total_price, products(title, image_urls))`)
+            .eq('id', id)
+            .eq('shop_id', shopData.id)
+            .single();
+
+        setOrder(orderData);
+        setLastRefreshed(new Date());
+        setLoading(false);
+        if (isRefresh) setRefreshing(false);
+    };
+
+    // Auto-poll every 30 seconds
+    useEffect(() => {
+        if (!slug || !orderId) return;
+        pollRef.current = setInterval(() => load(slug, orderId, true), 30000);
+        return () => { if (pollRef.current) clearInterval(pollRef.current); };
+    }, [slug, orderId]);
+
+    if (loading) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-gray-50">
+            <div className="min-h-screen bg-slate-50 flex items-center justify-center">
                 <div className="text-center">
-                    <h1 className="text-2xl font-bold mb-2">Order Not Found</h1>
-                    <p className="text-gray-500 mb-6">We couldn't locate tracking information for order #{id.split('-')[0]}</p>
-                    <Link href={`/shop/${slug}`} className="text-blue-600 hover:underline">
-                        Return to {shop.shop_name}
-                    </Link>
+                    <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                    <p className="text-gray-500 text-sm font-medium">Loading your order...</p>
                 </div>
             </div>
         );
     }
 
-    const tStyles = {
-        bg: shop.template === 'modern-dark' ? 'bg-gray-950 text-gray-100' : 'bg-gray-50 text-gray-900',
-        card: shop.template === 'modern-dark' ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100',
-        border: shop.template === 'modern-dark' ? 'border-gray-800' : 'border-gray-100',
-        textMuted: shop.template === 'modern-dark' ? 'text-gray-400' : 'text-gray-500',
+    if (!shop) {
+        return <div className="min-h-screen flex items-center justify-center text-gray-600">Shop not found.</div>;
+    }
+
+    const accent = shop.primary_color || '#2563EB';
+
+    if (!order) {
+        return (
+            <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-8 text-center">
+                <AlertCircle className="w-16 h-16 text-gray-300 mb-4" />
+                <h1 className="text-2xl font-bold text-gray-900 mb-2">Order Not Found</h1>
+                <p className="text-gray-500 max-w-sm mb-6">We couldn't find tracking info for this order.</p>
+                <Link href={`/shop/${slug}`} className="text-blue-600 font-medium hover:underline">Return to {shop.shop_name}</Link>
+            </div>
+        );
+    }
+
+    const isCancelled = order.status === 'cancelled';
+    const stepIndex = STEPS.findIndex(s => s.id === order.status);
+    const progress = isCancelled ? 0 : Math.max(0, (stepIndex / (STEPS.length - 1)) * 100);
+    const colors = STATUS_COLOR[order.status] || STATUS_COLOR.processing;
+
+    const items = order.order_items || [];
+    const subtotal = items.reduce((s: number, i: any) => s + Number(i.total_price ?? (i.unit_price * i.quantity)), 0);
+
+    const statusTimestamps: Record<string, string | undefined> = {
+        processing: order.created_at,
+        packed:     order.packed_at,
+        shipped:    order.shipped_at,
+        delivered:  order.delivered_at,
     };
 
-    const statusSteps = [
-        { id: 'processing', label: 'Processing', icon: Package },
-        { id: 'shipped', label: 'Shipped', icon: Truck },
-        { id: 'delivered', label: 'Delivered', icon: CheckCircle }
-    ];
-
-    const currentStepIndex = statusSteps.findIndex(s => s.id === order.status);
-
     return (
-        <div className={`min-h-screen ${tStyles.bg} py-12 px-4 sm:px-6 lg:px-8 font-sans`}>
-            <div className="max-w-3xl mx-auto space-y-8">
+        <div className="min-h-screen bg-slate-50 font-sans">
 
-                {/* Header */}
-                <div className="flex items-center justify-between">
-                    <Link href={`/shop/${slug}`} className="flex items-center gap-2 text-blue-600 hover:text-blue-800 transition">
-                        <Store className="w-5 h-5" />
-                        <span className="font-medium">Back to {shop.shop_name}</span>
+            {/* ── TOP NAV ── */}
+            <nav className="bg-white border-b border-gray-100 sticky top-0 z-40 shadow-sm">
+                <div className="max-w-4xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+                    <Link href={`/shop/${slug}`} className="flex items-center gap-2 text-sm font-semibold text-gray-700 hover:text-gray-900 transition">
+                        {shop.logo_url ? (
+                            <img src={shop.logo_url} alt={shop.shop_name} className="h-7 w-auto object-contain" />
+                        ) : (
+                            <div style={{ backgroundColor: accent }} className="w-7 h-7 rounded-lg flex items-center justify-center text-white font-black text-sm">
+                                {shop.shop_name[0]}
+                            </div>
+                        )}
+                        <span>{shop.shop_name}</span>
                     </Link>
-                    {order.invoice_url && (
-                        <Link href={order.invoice_url} target="_blank" className="flex items-center gap-2 bg-blue-50 text-blue-700 px-4 py-2 rounded-lg font-medium hover:bg-blue-100 transition">
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => load(slug, orderId, true)}
+                            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition"
+                            disabled={refreshing}
+                        >
+                            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+                            <span className="hidden sm:inline">Auto-refresh</span>
+                        </button>
+                        <Link
+                            href={`/shop/${slug}/invoice/${orderId}`}
+                            className="flex items-center gap-1.5 text-sm font-semibold border rounded-xl px-3 py-1.5 transition"
+                            style={{ borderColor: accent, color: accent }}
+                        >
                             <Receipt className="w-4 h-4" />
-                            Download Invoice
+                            <span className="hidden sm:inline">Invoice</span>
                         </Link>
-                    )}
+                    </div>
                 </div>
+            </nav>
 
-                {/* Status Hero */}
-                <div className={`${tStyles.card} rounded-3xl p-8 border text-center shadow-sm`}>
-                    <h1 className="text-3xl font-extrabold mb-2">Order #{order.id.split('-')[0].toUpperCase()}</h1>
-                    <p className={`${tStyles.textMuted}`}>Placed on {new Date(order.created_at).toLocaleDateString()}</p>
+            <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-6">
 
-                    {/* Progress Tracker Tracker */}
-                    <div className="mt-12 mb-4 relative">
-                        <div className={`absolute top-1/2 left-0 right-0 h-1 bg-gray-200 dark:bg-gray-800 -translate-y-1/2 rounded-full overflow-hidden`}>
-                            <div
-                                className="h-full bg-blue-600 transition-all duration-1000"
-                                style={{ width: `${(currentStepIndex / (statusSteps.length - 1)) * 100}%` }}
-                            />
-                        </div>
+                {/* ── ORDER HERO ── */}
+                <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+                    {/* Accent top */}
+                    <div style={{ backgroundColor: accent }} className="h-1.5 w-full" />
 
-                        <div className="relative flex justify-between z-10">
-                            {statusSteps.map((step, index) => {
-                                const isCompleted = index <= currentStepIndex;
-                                const isCurrent = index === currentStepIndex;
-                                const Icon = step.icon;
+                    <div className="p-8 sm:p-10 text-center">
+                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Order Reference</p>
+                        <h1 className="text-4xl font-black text-gray-900 mb-1">#{order.id.split('-')[0].toUpperCase()}</h1>
+                        <p className="text-sm text-gray-400">
+                            Placed on {new Date(order.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+                        </p>
 
-                                return (
-                                    <div key={step.id} className="flex flex-col items-center">
-                                        <div className={`
-                                            w-14 h-14 rounded-full flex items-center justify-center border-4 ${tStyles.card} shadow-sm transition-colors duration-500
-                                            ${isCompleted ? 'bg-blue-600 text-white border-blue-100 dark:border-blue-900' : 'bg-gray-100 text-gray-400 dark:bg-gray-800'}
-                                            ${isCurrent ? 'ring-4 ring-blue-100 dark:ring-blue-900/50 scale-110' : ''}
-                                        `}>
-                                            <Icon className={`w-6 h-6 ${isCurrent && !isCompleted ? 'animate-pulse' : ''}`} />
-                                        </div>
-                                        <span className={`mt-4 font-bold text-sm ${isCompleted ? '' : tStyles.textMuted}`}>
-                                            {step.label}
-                                        </span>
+                        {isCancelled && (
+                            <div className="mt-6 inline-flex items-center gap-2 bg-red-50 text-red-700 border border-red-100 px-5 py-3 rounded-2xl font-bold text-sm">
+                                <AlertCircle className="w-4 h-4" /> This order has been cancelled
+                            </div>
+                        )}
+
+                        {!isCancelled && (
+                            <>
+                                {/* ── PROGRESS BAR ── */}
+                                <div className="mt-12 mb-4 relative px-4">
+                                    {/* Track */}
+                                    <div className="absolute top-7 left-[calc(12%+1rem)] right-[calc(12%+1rem)] h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                        <div
+                                            className="h-full rounded-full transition-all duration-1000 ease-in-out"
+                                            style={{ width: `${progress}%`, backgroundColor: accent }}
+                                        />
                                     </div>
-                                );
-                            })}
-                        </div>
+
+                                    {/* Steps */}
+                                    <div className="relative flex justify-between">
+                                        {STEPS.map((step, i) => {
+                                            const done = !isCancelled && i < stepIndex;
+                                            const current = i === stepIndex && !isCancelled;
+                                            const pending = i > stepIndex;
+                                            const Icon = step.Icon;
+                                            const ts = statusTimestamps[step.id];
+
+                                            return (
+                                                <div key={step.id} className="flex flex-col items-center flex-1">
+                                                    <div
+                                                        className={`
+                                                            w-14 h-14 rounded-full flex items-center justify-center border-4 transition-all duration-500 shadow-sm
+                                                            ${current ? `ring-4 ring-offset-2 scale-110 ${colors.ring}` : ''}
+                                                            ${done ? 'border-transparent text-white' : 'border-gray-200 bg-white'}
+                                                            ${pending ? 'text-gray-300' : ''}
+                                                        `}
+                                                        style={done || current ? { backgroundColor: accent, borderColor: accent, color: '#fff' } : {}}
+                                                    >
+                                                        <Icon className={`w-6 h-6 ${current ? 'animate-pulse' : ''}`} />
+                                                    </div>
+                                                    <p className={`mt-3 text-sm font-bold ${pending ? 'text-gray-300' : 'text-gray-700'}`}>{step.label}</p>
+                                                    {ts && !pending && (
+                                                        <p className="text-[10px] text-gray-400 mt-0.5">
+                                                            {new Date(ts).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* Current Status message */}
+                                <div className="mt-8 inline-flex items-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-bold" style={{ backgroundColor: accent + '18', color: accent }}>
+                                    {STEPS[stepIndex]?.label === undefined ? 'Processing' : `Status: ${STEPS[stepIndex]?.label}`}
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
 
-                {/* Order Details & Items */}
-                <div className={`${tStyles.card} rounded-3xl p-8 border shadow-sm`}>
-                    <h2 className="text-xl font-bold mb-6">Order Summary</h2>
+                {/* ── TRACKING NUMBER CARD ── */}
+                {order.tracking_number && (
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex items-start gap-4">
+                        <div style={{ backgroundColor: accent + '18' }} className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0">
+                            <Truck className="w-5 h-5" style={{ color: accent }} />
+                        </div>
+                        <div className="flex-1">
+                            <p className="font-bold text-gray-900 text-sm mb-1">Shipment Tracking</p>
+                            <div className="flex flex-wrap items-center gap-3">
+                                {order.tracking_carrier && (
+                                    <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-lg">{order.tracking_carrier}</span>
+                                )}
+                                <span className="font-mono text-sm font-bold text-gray-800">{order.tracking_number}</span>
+                            </div>
+                            {order.tracking_url && (
+                                <a
+                                    href={order.tracking_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold rounded-lg px-3 py-1.5 border transition"
+                                    style={{ color: accent, borderColor: accent + '50', backgroundColor: accent + '10' }}
+                                >
+                                    <ExternalLink className="w-3.5 h-3.5" /> Track on Carrier Website
+                                </a>
+                            )}
+                        </div>
+                    </div>
+                )}
 
-                    <div className="space-y-6">
-                        {order.order_items?.map((item: any, idx: number) => (
-                            <div key={idx} className={`flex items-center gap-4 pb-6 ${idx !== order.order_items.length - 1 ? 'border-b' : ''} ${tStyles.border}`}>
-                                <div className="w-16 h-16 rounded-xl overflow-hidden bg-gray-100 flex-shrink-0">
-                                    <img
-                                        src={item.products?.image_urls?.[0] || 'https://images.unsplash.com/photo-1608688461751-692348db49b5?w=400&q=80'}
-                                        alt={item.products?.title || 'Product'}
-                                        className="w-full h-full object-cover"
-                                    />
+                {/* ── CUSTOMER + ORDER DETAILS ── */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Customer Info */}
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Customer</p>
+                        <div className="space-y-2">
+                            {order.customer_name && (
+                                <p className="font-semibold text-gray-900 flex items-center gap-2">
+                                    <span className="w-5 h-5 rounded-full bg-gray-100 text-gray-600 text-xs flex items-center justify-center font-bold">
+                                        {order.customer_name[0]}
+                                    </span>
+                                    {order.customer_name}
+                                </p>
+                            )}
+                            {order.customer_email && <p className="text-sm text-gray-500 flex items-center gap-2"><Mail className="w-4 h-4 text-gray-400" />{order.customer_email}</p>}
+                            {order.customer_phone && <p className="text-sm text-gray-500 flex items-center gap-2"><Phone className="w-4 h-4 text-gray-400" />{order.customer_phone}</p>}
+                        </div>
+                    </div>
+
+                    {/* Delivery Address */}
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Delivery Address</p>
+                        {order.customer_address ? (
+                            <div className="text-sm text-gray-600 space-y-0.5">
+                                <p className="flex items-start gap-2"><MapPin className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                                    <span>{order.customer_address}{order.customer_city ? `, ${order.customer_city}` : ''}{order.customer_postal ? ` ${order.customer_postal}` : ''}</span>
+                                </p>
+                            </div>
+                        ) : (
+                            <p className="text-sm text-gray-400 italic">No address recorded</p>
+                        )}
+                    </div>
+                </div>
+
+                {/* ── ORDER ITEMS ── */}
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                    <div className="px-6 py-4 border-b border-gray-50">
+                        <h2 className="font-bold text-gray-900">Order Summary</h2>
+                    </div>
+                    <div className="divide-y divide-gray-50">
+                        {items.map((item: any, i: number) => (
+                            <div key={i} className="px-6 py-4 flex items-center gap-4">
+                                <div className="w-12 h-12 bg-gray-100 rounded-xl overflow-hidden flex-shrink-0">
+                                    {item.products?.image_urls?.[0] ? (
+                                        <img
+                                            src={item.products.image_urls[0]}
+                                            alt={item.products?.title}
+                                            className="w-full h-full object-cover"
+                                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                        />
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center">
+                                            <Package className="w-5 h-5 text-gray-300" />
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="flex-1">
-                                    <h4 className="font-bold">{item.products?.title || 'Unknown Product'}</h4>
-                                    <p className={`text-sm ${tStyles.textMuted}`}>Qty: {item.quantity}</p>
+                                    <p className="font-semibold text-gray-900 text-sm">{item.products?.title || 'Product'}</p>
+                                    <p className="text-xs text-gray-400">Qty: {item.quantity} × Rs. {Number(item.unit_price).toLocaleString()}</p>
                                 </div>
-                                <div className="font-bold">
-                                    රු {(item.unit_price * item.quantity).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                </div>
+                                <p className="font-bold text-gray-900 font-mono text-sm">
+                                    Rs. {Number(item.total_price ?? item.unit_price * item.quantity).toLocaleString()}
+                                </p>
                             </div>
                         ))}
                     </div>
 
-                    {/* Total Breakdown */}
-                    <div className={`mt-6 pt-6 border-t font-mono text-sm ${tStyles.border} space-y-3`}>
-                        <div className="flex justify-between items-center text-gray-500">
-                            <span>Subtotal</span>
-                            <span>රු {Number(order.total_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-gray-500">
-                            <span>Tax (Local)</span>
-                            <span>Calculated at checkout</span>
-                        </div>
-                        <div className="flex justify-between items-center text-lg font-bold font-sans mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
-                            <span>Total Paid</span>
-                            <span className="text-blue-600">රු {Number(order.total_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                        </div>
+                    {/* Total */}
+                    <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex justify-between items-center">
+                        <span className="font-bold text-gray-900">Total Paid</span>
+                        <span className="text-xl font-black font-mono" style={{ color: accent }}>
+                            Rs. {Number(order.total_amount).toLocaleString()}
+                        </span>
                     </div>
                 </div>
+
+                {/* ── FOOTER CTA ── */}
+                <div className="flex flex-col sm:flex-row gap-3 pb-4">
+                    <Link
+                        href={`/shop/${slug}/invoice/${orderId}`}
+                        className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold text-sm border-2 transition text-white"
+                        style={{ backgroundColor: accent, borderColor: accent }}
+                    >
+                        <Receipt className="w-4 h-4" /> Download Invoice
+                    </Link>
+                    <Link
+                        href={`/shop/${slug}`}
+                        className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold text-sm border-2 border-gray-200 text-gray-700 hover:bg-gray-50 transition"
+                    >
+                        <Store className="w-4 h-4" /> Continue Shopping
+                    </Link>
+                </div>
+
+                {/* Auto-refresh note */}
+                <p className="text-center text-xs text-gray-300 pb-4">
+                    Status auto-refreshes every 30s · Last updated: {lastRefreshed.toLocaleTimeString()}
+                </p>
 
             </div>
         </div>

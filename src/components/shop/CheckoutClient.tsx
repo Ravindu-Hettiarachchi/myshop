@@ -91,7 +91,17 @@ export default function CheckoutClient({ shop }: { shop: any }) {
         try {
             const { data: orderData, error: orderError } = await supabase
                 .from('orders')
-                .insert([{ shop_id: shop.id, customer_email: customerEmail, total_amount: grandTotal, status: 'processing' }])
+                .insert([{
+                    shop_id: shop.id,
+                    customer_email: customerEmail,
+                    customer_name: fullName.trim(),
+                    customer_address: address.trim(),
+                    customer_city: city.trim(),
+                    customer_postal: postalCode.trim(),
+                    payment_method: paymentMethod,
+                    total_amount: grandTotal,
+                    status: 'processing',
+                }])
                 .select().single();
             if (orderError) throw orderError;
 
