@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { Store, Palette, Type, Settings, ExternalLink, UploadCloud, X, ImageIcon } from 'lucide-react';
 import { buildStorefrontUrl } from '@/lib/storefront';
+import { uploadToShopAssets } from '@/lib/storage/shopAssets';
 
 // Themes are now loaded from the database (managed by the admin panel)
 
@@ -14,6 +15,8 @@ const FONTS = [
     { id: 'Poppins', name: 'Poppins', style: 'font-sans' },
     { id: 'Roboto Mono', name: 'Roboto Mono', style: 'font-mono' },
 ];
+
+const SETTINGS_TABS: Array<'General' | 'Theme' | 'Invoice'> = ['General', 'Theme', 'Invoice'];
 
 interface DbTheme {
     id: string;
@@ -123,15 +126,12 @@ export default function DashboardSettingsPage() {
             const fileName = `${shop.id}-${type}-${Math.random()}.${fileExt}`;
             const filePath = `${shop.id}/${fileName}`;
 
-            const { error: uploadError } = await supabase.storage
-                .from('shop-assets')
-                .upload(filePath, file, { upsert: true });
-
-            if (uploadError) throw uploadError;
-
-            const { data: { publicUrl } } = supabase.storage
-                .from('shop-assets')
-                .getPublicUrl(filePath);
+            const { publicUrl } = await uploadToShopAssets({
+                supabase,
+                file,
+                filePath,
+                upsert: true,
+            });
 
             updateForm(type === 'logo' ? 'logo_url' : 'banner_url', publicUrl);
 
@@ -140,9 +140,10 @@ export default function DashboardSettingsPage() {
                 [type === 'logo' ? 'logo_url' : 'banner_url']: publicUrl
             }).eq('id', shop.id);
 
-        } catch (error) {
-            console.error(`Error uploading ${type}:`, error);
-            alert(`Failed to upload ${type}. Ensure bucket is configured.`);
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : `Failed to upload ${type}.`;
+            console.error(`Error uploading ${type}:`, message);
+            alert(message);
         } finally {
             setUploading(false);
         }
@@ -165,7 +166,7 @@ export default function DashboardSettingsPage() {
                 <div className="text-center max-w-md flex flex-col items-center">
                     <Store className="w-16 h-16 text-gray-300 mb-4" />
                     <h2 className="text-2xl font-bold text-gray-900 mb-2">No Shop Found</h2>
-                    <p className="text-gray-500 mb-6">You haven't created a shop yet. Complete the business verification first.</p>
+                    <p className="text-gray-500 mb-6">You haven&apos;t created a shop yet. Complete the business verification first.</p>
                     <a href="/onboarding" className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors">
                         Start Onboarding
                     </a>
@@ -205,10 +206,10 @@ export default function DashboardSettingsPage() {
 
             {/* Tabs */}
             <div className="flex items-center gap-6 border-b border-gray-100 mb-8 overflow-x-auto">
-                {['General', 'Theme', 'Invoice'].map((tab) => (
+                {SETTINGS_TABS.map((tab) => (
                     <button
                         key={tab}
-                        onClick={() => setActiveTab(tab as any)}
+                        onClick={() => setActiveTab(tab)}
                         className={`pb-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === tab ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
                     >
                         {tab} Settings

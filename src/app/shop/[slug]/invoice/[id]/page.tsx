@@ -254,7 +254,6 @@ export default async function InvoicePage({ params }: { params: Promise<{ slug: 
                                                             src={item.products.image_urls[0]}
                                                             alt={item.products?.title || 'Product'}
                                                             className="w-10 h-10 rounded-lg object-cover border border-gray-100 print:hidden"
-                                                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                                                         />
                                                     )}
                                                     <p className="font-semibold text-gray-900">{item.products?.title || 'Product'}</p>

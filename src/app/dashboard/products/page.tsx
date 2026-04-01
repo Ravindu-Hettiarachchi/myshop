@@ -3,18 +3,31 @@
 import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { PackageSearch, Plus, Search, AlertTriangle, Edit, Trash2, CheckCircle2, X, Loader2, UploadCloud, ImageIcon, Image } from 'lucide-react';
+import { uploadToShopAssets } from '@/lib/storage/shopAssets';
+
+interface ProductRecord {
+    id: string;
+    title: string;
+    description: string | null;
+    price: number;
+    stock_quantity: number;
+    low_stock_threshold: number | null;
+    image_urls: string[];
+}
 
 export default function ProductsDashboard() {
     const supabase = createClient();
-    const [products, setProducts] = useState<any[]>([]);
+    const [products, setProducts] = useState<ProductRecord[]>([]);
     const [shopId, setShopId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
 
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editingProduct, setEditingProduct] = useState<any | null>(null);
+    const [editingProduct, setEditingProduct] = useState<ProductRecord | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
+    const [uploadError, setUploadError] = useState<string | null>(null);
+    const [formError, setFormError] = useState<string | null>(null);
     const [formData, setFormData] = useState({
         title: '', description: '', price: '', stock_quantity: 0, low_stock_threshold: 5, image_urls: [] as string[]
     });
@@ -39,8 +52,10 @@ export default function ProductsDashboard() {
 
     const filteredProducts = products.filter(p => p.title.toLowerCase().includes(search.toLowerCase()));
 
-    const openModal = (product: any = null) => {
+    const openModal = (product: ProductRecord | null = null) => {
         setEditingProduct(product);
+        setUploadError(null);
+        setFormError(null);
         setFormData(product ? {
             title: product.title, description: product.description || '', price: product.price.toString(),
             stock_quantity: product.stock_quantity, low_stock_threshold: product.low_stock_threshold || 5, image_urls: product.image_urls || []
@@ -54,25 +69,24 @@ export default function ProductsDashboard() {
         const file = e.target.files?.[0];
         if (!file || !shopId) return;
 
+        setUploadError(null);
         setIsUploading(true);
         try {
             const fileExt = file.name.split('.').pop();
             const fileName = `product-${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
             const filePath = `${shopId}/products/${fileName}`;
 
-            const { error: uploadError } = await supabase.storage
-                .from('shop-assets')
-                .upload(filePath, file, { upsert: true });
-
-            if (uploadError) throw uploadError;
-
-            const { data: { publicUrl } } = supabase.storage
-                .from('shop-assets')
-                .getPublicUrl(filePath);
+            const { publicUrl } = await uploadToShopAssets({
+                supabase,
+                file,
+                filePath,
+                upsert: true,
+            });
 
             setFormData(prev => ({ ...prev, image_urls: [publicUrl, ...prev.image_urls.filter(u => u !== publicUrl)] }));
-        } catch (err: any) {
-            alert(`Upload failed: ${err.message}. Ensure the 'shop-assets' bucket is configured in Supabase.`);
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'Upload failed. Please try again.';
+            setUploadError(message);
         } finally {
             setIsUploading(false);
             if (fileInputRef.current) fileInputRef.current.value = '';
@@ -85,6 +99,7 @@ export default function ProductsDashboard() {
 
     const handleSave = async () => {
         if (!shopId) return;
+        setFormError(null);
         setIsSaving(true);
         try {
             const payload = {
@@ -103,8 +118,9 @@ export default function ProductsDashboard() {
                 if (data) setProducts([data, ...products]);
             }
             closeModal();
-        } catch (err: any) {
-            alert(`Failed to save: ${err.message}`);
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'Failed to save product.';
+            setFormError(message);
         } finally {
             setIsSaving(false);
         }
@@ -320,6 +336,18 @@ export default function ProductsDashboard() {
                         {/* Modal Body */}
                         <div className="p-6 overflow-y-auto flex-1 space-y-5">
 
+                            {uploadError && (
+                                <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                                    {uploadError}
+                                </div>
+                            )}
+
+                            {formError && (
+                                <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                                    {formError}
+                                </div>
+                            )}
+
                             {/* Image Upload Section */}
                             <div>
                                 <label className="block text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Product Images</label>
@@ -447,7 +475,7 @@ export default function ProductsDashboard() {
                                 <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide flex items-center gap-1.5">
                                     Low Stock Threshold <AlertTriangle className="w-3.5 h-3.5 text-orange-400" />
                                 </label>
-                                <p className="text-xs text-gray-400 mb-2">You'll see a warning when stock drops to this level.</p>
+                                <p className="text-xs text-gray-400 mb-2">You&apos;ll see a warning when stock drops to this level.</p>
                                 <input type="number" value={formData.low_stock_threshold}
                                     onChange={e => setFormData({ ...formData, low_stock_threshold: parseInt(e.target.value) || 0 })}
                                     className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 transition"
