@@ -3,9 +3,10 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import PlatformLogo from '@/components/PlatformLogo';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { Loader2 } from 'lucide-react';
+import { resolvePostLoginRedirect } from '@/lib/auth/redirects';
 
 const isValidEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
 
@@ -16,6 +17,7 @@ function FieldError({ msg }: { msg?: string }) {
 
 export default function LoginPage() {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const supabase = createClient();
 
     const [email, setEmail] = useState('');
@@ -47,40 +49,34 @@ export default function LoginPage() {
         if (Object.keys(errs).length > 0) return;
 
         setIsLoading(true);
+        const preferredPath = searchParams.get('next');
 
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
         if (error) { setServerError(error.message); setIsLoading(false); return; }
+        if (!data.user?.id) { setServerError('Login succeeded but no user session was returned.'); setIsLoading(false); return; }
 
-        const { data: ownerData } = await supabase
-            .from('owners')
-            .select('role')
-            .eq('id', data.user.id)
-            .maybeSingle();
-
-        const role = ownerData?.role || 'customer';
-        if (role === 'admin') { router.push('/admin'); return; }
-
-        if (role === 'shop_owner') {
-            const { data: shop } = await supabase
-                .from('shops')
-                .select('route_path')
-                .eq('owner_id', data.user.id)
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .maybeSingle();
-
-            setIsLoading(false);
-            router.push(shop?.route_path ? `/dashboard/${shop.route_path}` : '/setup');
-            return;
-        }
-
+        const { target } = await resolvePostLoginRedirect({
+            supabase,
+            userId: data.user.id,
+            preferredPath,
+        });
         setIsLoading(false);
-        router.push('/');
+        router.push(target);
     };
 
     const handleGoogleLogin = async () => {
-        await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: `${window.location.origin}/auth/callback` } });
+        const callbackUrl = new URL('/auth/callback', window.location.origin);
+        const preferredPath = searchParams.get('next');
+
+        if (preferredPath) {
+            callbackUrl.searchParams.set('next', preferredPath);
+        }
+
+        await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: { redirectTo: callbackUrl.toString() },
+        });
     };
 
     const inputCls = (field: 'email' | 'password') =>

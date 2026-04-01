@@ -4,10 +4,19 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { Loader2, ArrowLeft, CreditCard, Wallet, MapPin, Truck, AlertCircle } from 'lucide-react';
+import type { User } from '@supabase/supabase-js';
 
 interface CartItem { id: string; title: string; price: number; cartQuantity: number; image: string; }
+interface ShopData {
+    id: string;
+    route_path: string;
+    tax_rate: number | string | null;
+    template: string | null;
+}
 
-const isValidEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
+interface OrderInsertResult {
+    id: string;
+}
 
 function FieldError({ msg }: { msg?: string }) {
     if (!msg) return null;
@@ -20,13 +29,13 @@ function FieldError({ msg }: { msg?: string }) {
 
 type Fields = 'fullName' | 'address' | 'city' | 'postalCode';
 
-export default function CheckoutClient({ shop }: { shop: any }) {
+export default function CheckoutClient({ shop }: { shop: ShopData }) {
     const router = useRouter();
     const supabase = createClient();
 
     const [cart, setCart] = useState<CartItem[]>([]);
     const [customerEmail, setCustomerEmail] = useState('');
-    const [sessionUser, setSessionUser] = useState<any>(null);
+    const [sessionUser, setSessionUser] = useState<User | null>(null);
     const [isCheckingOut, setIsCheckingOut] = useState(false);
 
     const [fullName, setFullName] = useState('');
@@ -38,6 +47,7 @@ export default function CheckoutClient({ shop }: { shop: any }) {
     const [errors, setErrors] = useState<Partial<Record<Fields, string>>>({});
     const [touched, setTouched] = useState<Partial<Record<Fields, boolean>>>({});
     const [orderError, setOrderError] = useState('');
+    const [orderSuccess, setOrderSuccess] = useState<string | null>(null);
 
     useEffect(() => {
         const savedCart = localStorage.getItem(`myshop_cart_${shop.id}`);
@@ -51,7 +61,9 @@ export default function CheckoutClient({ shop }: { shop: any }) {
     }, [shop.id, shop.route_path, router, supabase.auth]);
 
     const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.cartQuantity), 0);
-    const taxCalc = cartTotal * (parseFloat(shop.tax_rate || '0') / 100);
+    const rawTaxRate = typeof shop.tax_rate === 'number' ? shop.tax_rate : parseFloat(shop.tax_rate ?? '0');
+    const normalizedTaxRate = Number.isFinite(rawTaxRate) ? rawTaxRate : 0;
+    const taxCalc = cartTotal * (normalizedTaxRate / 100);
     const grandTotal = cartTotal + taxCalc;
 
     const validate = () => {
@@ -78,9 +90,9 @@ export default function CheckoutClient({ shop }: { shop: any }) {
                 : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-black focus:ring-1 focus:ring-black hover:border-gray-400'
         }`;
 
-    const handlePlaceOrder = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handlePlaceOrder = async () => {
         setOrderError('');
+        setOrderSuccess(null);
         const errs = validate();
         setErrors(errs);
         setTouched({ fullName: true, address: true, city: true, postalCode: true });
@@ -102,19 +114,23 @@ export default function CheckoutClient({ shop }: { shop: any }) {
                     total_amount: grandTotal,
                     status: 'processing',
                 }])
-                .select().single();
+                .select('id').single<OrderInsertResult>();
             if (orderError) throw orderError;
 
-            const orderItems = cart.map((item: any) => ({
+            const orderItems = cart.map((item: CartItem) => ({
                 order_id: orderData.id, product_id: item.id, quantity: item.cartQuantity, unit_price: item.price
             }));
             const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
             if (itemsError) throw itemsError;
 
             localStorage.removeItem(`myshop_cart_${shop.id}`);
-            router.push(`/shop/${shop.route_path}/order/${orderData.id}`);
-        } catch (error: any) {
-            setOrderError(`Failed to place order: ${error.message || 'Please try again.'}`);
+            setOrderSuccess('Payment successful. Your order has been placed successfully. Redirecting...');
+            setTimeout(() => {
+                router.push(`/shop/${shop.route_path}/checkout/success?orderId=${orderData.id}`);
+            }, 900);
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'Please try again.';
+            setOrderError(`Failed to place order: ${message}`);
         } finally {
             setIsCheckingOut(false);
         }
@@ -147,6 +163,13 @@ export default function CheckoutClient({ shop }: { shop: any }) {
                     <div className="mb-6 bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 flex items-start gap-3 text-sm">
                         <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
                         <span>{orderError}</span>
+                    </div>
+                )}
+
+                {orderSuccess && (
+                    <div className="mb-6 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl p-4 flex items-start gap-3 text-sm">
+                        <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        <span>{orderSuccess}</span>
                     </div>
                 )}
 
@@ -253,7 +276,7 @@ export default function CheckoutClient({ shop }: { shop: any }) {
                                     <span>Rs. {cartTotal.toLocaleString()}</span>
                                 </div>
                                 <div className={`flex justify-between ${tStyles.muted}`}>
-                                    <span>Tax ({shop.tax_rate || 0}%)</span>
+                                    <span>Tax ({normalizedTaxRate}%)</span>
                                     <span>Rs. {taxCalc.toLocaleString()}</span>
                                 </div>
                                 <div className="flex justify-between text-2xl font-black pt-6 pb-2">

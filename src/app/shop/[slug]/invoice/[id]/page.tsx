@@ -1,39 +1,79 @@
 import { createClient } from '@/utils/supabase/server';
 import { notFound } from 'next/navigation';
-import { Store, MapPin, Phone, Mail, FileText, Package, Truck, CheckCircle, Clock } from 'lucide-react';
+import { MapPin, Phone, Mail, FileText, Truck } from 'lucide-react';
 import Link from 'next/link';
 import PrintButton from './PrintButton';
 
 export const revalidate = 0;
+
+interface ShopInvoiceView {
+    id: string;
+    shop_name: string;
+    logo_url: string | null;
+    company_address: string | null;
+    invoice_notes: string | null;
+    tax_rate: number | null;
+    primary_color: string | null;
+    route_path: string;
+}
+
+interface InvoiceOrderItem {
+    id: string;
+    product_id: string;
+    quantity: number;
+    unit_price: number;
+    products: {
+        title: string | null;
+        image_urls: string[] | null;
+    } | null;
+}
+
+interface InvoiceOrder {
+    id: string;
+    created_at: string;
+    status: string;
+    total_amount: number | null;
+    payment_method: string | null;
+    customer_name: string | null;
+    customer_email: string | null;
+    customer_phone: string | null;
+    customer_address: string | null;
+    customer_city: string | null;
+    customer_postal: string | null;
+    tracking_number: string | null;
+    tracking_carrier: string | null;
+    tracking_url: string | null;
+    order_items: InvoiceOrderItem[];
+}
 
 export default async function InvoicePage({ params }: { params: Promise<{ slug: string; id: string }> }) {
     const { slug, id } = await params;
     const supabase = await createClient();
 
     // 1. Fetch Shop
-    const { data: shop } = await supabase
+    const { data: shop, error: shopError } = await supabase
         .from('shops')
         .select('id, shop_name, logo_url, company_address, invoice_notes, tax_rate, primary_color, route_path')
         .eq('route_path', slug)
-        .single();
+        .maybeSingle<ShopInvoiceView>();
 
-    if (!shop) notFound();
+    if (shopError || !shop) notFound();
 
     // 2. Fetch Order + Items
-    const { data: order } = await supabase
+    const { data: order, error: orderError } = await supabase
         .from('orders')
         .select(`
             *,
             order_items (
-                id, product_id, quantity, unit_price, total_price,
+                id, product_id, quantity, unit_price,
                 products ( title, image_urls )
             )
         `)
         .eq('id', id)
         .eq('shop_id', shop.id)
-        .single();
+        .maybeSingle<InvoiceOrder>();
 
-    if (!order) {
+    if (orderError || !order) {
         return (
             <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
                 <FileText className="w-16 h-16 text-gray-300 mb-4" />
@@ -46,8 +86,8 @@ export default async function InvoicePage({ params }: { params: Promise<{ slug: 
 
     // Financial Calculations
     const items = order.order_items || [];
-    const subtotal = items.reduce((s: number, item: any) => {
-        const lineTotal = item.total_price ?? (item.unit_price * item.quantity);
+    const subtotal = items.reduce((s: number, item: InvoiceOrderItem) => {
+        const lineTotal = item.unit_price * item.quantity;
         return s + Number(lineTotal);
     }, 0);
     const taxRate = Number(shop.tax_rate) || 0;
@@ -203,8 +243,8 @@ export default async function InvoicePage({ params }: { params: Promise<{ slug: 
                                     <tr>
                                         <td colSpan={4} className="py-8 text-center text-sm text-gray-400 italic">No line items recorded</td>
                                     </tr>
-                                ) : items.map((item: any) => {
-                                    const lineTotal = item.total_price ?? (item.unit_price * item.quantity);
+                                ) : items.map((item: InvoiceOrderItem) => {
+                                    const lineTotal = item.unit_price * item.quantity;
                                     return (
                                         <tr key={item.id} className="text-gray-700 hover:bg-gray-50/50 transition-colors">
                                             <td className="py-4 pr-4">
@@ -212,7 +252,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ slug: 
                                                     {item.products?.image_urls?.[0] && (
                                                         <img
                                                             src={item.products.image_urls[0]}
-                                                            alt={item.products?.title}
+                                                            alt={item.products?.title || 'Product'}
                                                             className="w-10 h-10 rounded-lg object-cover border border-gray-100 print:hidden"
                                                             onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                                                         />
@@ -275,7 +315,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ slug: 
                                     className="text-xs font-mono underline break-all"
                                     style={{ color: accentColor }}
                                 >
-                                    {`/shop/${slug}/order/${id.split('-')[0]}`}
+                                    {`/shop/${slug}/order/${id}`}
                                 </a>
                             </div>
                         </div>

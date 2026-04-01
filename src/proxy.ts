@@ -70,7 +70,9 @@ export async function proxy(request: NextRequest) {
                 return NextResponse.redirect(new URL('/admin', request.url));
             }
             // Unauthenticated or non-shop owners are redirected
-            return NextResponse.redirect(new URL('/login', request.url));
+            const loginUrl = new URL('/login', request.url);
+            loginUrl.searchParams.set('next', `${path}${request.nextUrl.search}`);
+            return NextResponse.redirect(loginUrl);
         }
     }
 

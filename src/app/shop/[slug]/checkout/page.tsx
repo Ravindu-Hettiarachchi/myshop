@@ -1,6 +1,5 @@
 import { createClient } from '@/utils/supabase/server';
 import CheckoutClient from '@/components/shop/CheckoutClient';
-import Link from 'next/link';
 
 export default async function CheckoutPage({ params }: { params: Promise<{ slug: string }> }) {
     const { slug } = await params;

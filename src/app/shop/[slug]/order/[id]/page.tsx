@@ -51,7 +51,7 @@ export default function OrderTrackerPage({ params }: { params: Promise<{ slug: s
 
         const { data: orderData } = await supabase
             .from('orders')
-            .select(`*, order_items(quantity, unit_price, total_price, products(title, image_urls))`)
+            .select(`*, order_items(quantity, unit_price, products(title, image_urls))`)
             .eq('id', id)
             .eq('shop_id', shopData.id)
             .single();
@@ -103,7 +103,7 @@ export default function OrderTrackerPage({ params }: { params: Promise<{ slug: s
     const colors = STATUS_COLOR[order.status] || STATUS_COLOR.processing;
 
     const items = order.order_items || [];
-    const subtotal = items.reduce((s: number, i: any) => s + Number(i.total_price ?? (i.unit_price * i.quantity)), 0);
+    const subtotal = items.reduce((s: number, i: any) => s + Number(i.unit_price * i.quantity), 0);
 
     const statusTimestamps: Record<string, string | undefined> = {
         processing: order.created_at,
@@ -314,7 +314,7 @@ export default function OrderTrackerPage({ params }: { params: Promise<{ slug: s
                                     <p className="text-xs text-gray-400">Qty: {item.quantity} × Rs. {Number(item.unit_price).toLocaleString()}</p>
                                 </div>
                                 <p className="font-bold text-gray-900 font-mono text-sm">
-                                    Rs. {Number(item.total_price ?? item.unit_price * item.quantity).toLocaleString()}
+                                    Rs. {Number(item.unit_price * item.quantity).toLocaleString()}
                                 </p>
                             </div>
                         ))}

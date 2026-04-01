@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server'
 // The client you created from the Server-Side Auth instructions
 import { createClient } from '@/utils/supabase/server'
+import { resolvePostLoginRedirect } from '@/lib/auth/redirects'
 
 export async function GET(request: Request) {
     const { searchParams, origin } = new URL(request.url)
     const code = searchParams.get('code')
+    const preferredPath = searchParams.get('next')
 
     // The previous default 'next' logic is overridden. OAuth needs dynamic routing.
     let targetRoute = '/'
@@ -14,33 +16,13 @@ export async function GET(request: Request) {
         const { data, error } = await supabase.auth.exchangeCodeForSession(code)
 
         if (!error && data?.user) {
+            const { target } = await resolvePostLoginRedirect({
+                supabase,
+                userId: data.user.id,
+                preferredPath,
+            })
 
-            // Replicate the login decision tree internally
-            const { data: ownerData } = await supabase
-                .from('owners')
-                .select('role')
-                .eq('id', data.user.id)
-                .maybeSingle()
-
-            const role = ownerData?.role || 'customer'
-
-            if (role === 'admin') {
-                targetRoute = '/admin'
-            } else if (role === 'shop_owner') {
-                const { data: shop } = await supabase
-                    .from('shops')
-                    .select('route_path')
-                    .eq('owner_id', data.user.id)
-                    .order('created_at', { ascending: false })
-                    .limit(1)
-                    .maybeSingle()
-
-                if (!shop?.route_path) {
-                    targetRoute = '/setup'
-                } else {
-                    targetRoute = `/dashboard/${shop.route_path}`
-                }
-            }
+            targetRoute = target
 
             const forwardedHost = request.headers.get('x-forwarded-host')
             const isLocalEnv = process.env.NODE_ENV === 'development'

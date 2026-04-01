@@ -31,7 +31,7 @@ export default function Home() {
         <div className="relative z-10 max-w-4xl mx-auto px-6 lg:px-8 text-center">
           <div className="inline-flex items-center gap-2 bg-blue-50 border border-blue-100 text-blue-700 text-xs font-semibold px-4 py-2 rounded-full mb-8 tracking-wide">
             <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
-            Sri Lanka's #1 SaaS E-commerce Platform
+            Sri Lanka&apos;s #1 SaaS E-commerce Platform
           </div>
 
           <h1 className="text-5xl lg:text-7xl font-extrabold text-gray-900 tracking-tight mb-6 leading-none">
@@ -50,7 +50,7 @@ export default function Home() {
               Start For Free
               <ArrowRight className="w-4 h-4" />
             </Link>
-            <Link href="/login" className="w-full sm:w-auto bg-white border border-gray-200 text-gray-700 font-semibold px-8 py-4 rounded-xl hover:border-blue-200 hover:bg-blue-50 transition text-sm">
+            <Link href="/login?next=/dashboard" className="w-full sm:w-auto bg-white border border-gray-200 text-gray-700 font-semibold px-8 py-4 rounded-xl hover:border-blue-200 hover:bg-blue-50 transition text-sm">
               Sign In to Dashboard →
             </Link>
           </div>
@@ -121,7 +121,7 @@ export default function Home() {
           <h2 className="text-4xl font-bold text-white mb-5 tracking-tight">Ready to sell online?</h2>
           <p className="text-blue-200 mb-10 text-lg">Join hundreds of Sri Lankan businesses on MyShop.</p>
           <Link href="/signup" className="inline-flex items-center gap-2 bg-white text-blue-700 font-bold px-8 py-4 rounded-xl hover:bg-blue-50 transition text-sm shadow-xl">
-            Create Your Shop — It's Free →
+            Create Your Shop — It&apos;s Free →
           </Link>
         </div>
       </section>
