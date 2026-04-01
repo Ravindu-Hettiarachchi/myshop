@@ -7,7 +7,7 @@ export async function GET(request: Request) {
     const code = searchParams.get('code')
 
     // The previous default 'next' logic is overridden. OAuth needs dynamic routing.
-    let targetRoute = '/dashboard'
+    let targetRoute = '/'
 
     if (code) {
         const supabase = await createClient()
@@ -20,34 +20,25 @@ export async function GET(request: Request) {
                 .from('owners')
                 .select('role')
                 .eq('id', data.user.id)
-                .single()
+                .maybeSingle()
 
-            const role = ownerData?.role || 'shop_owner'
+            const role = ownerData?.role || 'customer'
 
             if (role === 'admin') {
-                // Verify if the user already has a shop or needs onboarding
-                const { data: shops } = await supabase
+                targetRoute = '/admin'
+            } else if (role === 'shop_owner') {
+                const { data: shop } = await supabase
                     .from('shops')
-                    .select('id')
-                    .eq('owner_id', data.user.id) // Changed from user.id to data.user.id for consistency
-                    .limit(1);
-
-                if (!shops || shops.length === 0) {
-                    targetRoute = '/setup'
-                } else {
-                    targetRoute = '/dashboard'
-                }
-            } else {
-                const { data: shops } = await supabase
-                    .from('shops')
-                    .select('id')
+                    .select('route_path')
                     .eq('owner_id', data.user.id)
+                    .order('created_at', { ascending: false })
                     .limit(1)
+                    .maybeSingle()
 
-                if (!shops || shops.length === 0) {
+                if (!shop?.route_path) {
                     targetRoute = '/setup'
                 } else {
-                    targetRoute = '/dashboard'
+                    targetRoute = `/dashboard/${shop.route_path}`
                 }
             }
 

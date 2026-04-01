@@ -122,6 +122,9 @@ export default function AdminShopsPage() {
                                             <Link href={`/shop/${shop.route_path}`} target="_blank" className="text-xs text-gray-500 hover:text-white px-2 py-1 rounded border border-gray-700 hover:border-gray-500 transition">
                                                 Preview
                                             </Link>
+                                            <Link href={`/admin/shops/${shop.route_path}`} className="text-xs text-gray-500 hover:text-white px-2 py-1 rounded border border-gray-700 hover:border-gray-500 transition">
+                                                Manage
+                                            </Link>
                                             {shop.is_approved ? (
                                                 <button onClick={() => handleRevoke(shop.id)} disabled={actionId === shop.id} className="text-xs px-3 py-1 rounded border border-amber-800 text-amber-400 hover:bg-amber-900/30 transition disabled:opacity-50">
                                                     {actionId === shop.id ? '...' : 'Revoke'}

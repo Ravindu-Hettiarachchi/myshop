@@ -21,9 +21,15 @@ export default function SetupInstructionPage() {
                 return;
             }
 
-            const { data: shop } = await supabase.from('shops').select('id').eq('owner_id', user.id).single();
+            const { data: shop } = await supabase
+                .from('shops')
+                .select('route_path')
+                .eq('owner_id', user.id)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
             if (shop) {
-                router.push('/dashboard');
+                router.push(`/dashboard/${shop.route_path}`);
                 return;
             }
 

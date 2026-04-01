@@ -19,10 +19,6 @@ export default function AdminOverviewPage() {
     const [loading, setLoading] = useState(true);
     const [approving, setApproving] = useState<string | null>(null);
 
-    useEffect(() => {
-        fetchData();
-    }, []);
-
     const fetchData = async () => {
         const [{ data: shops }, { count: ownerCount }] = await Promise.all([
             supabase.from('shops').select('id, shop_name, route_path, is_approved, created_at').order('created_at', { ascending: false }),
@@ -39,6 +35,11 @@ export default function AdminOverviewPage() {
         setPendingShops(all.filter(s => !s.is_approved).slice(0, 5));
         setLoading(false);
     };
+
+    useEffect(() => {
+        fetchData();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const handleApprove = async (shopId: string) => {
         setApproving(shopId);

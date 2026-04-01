@@ -5,11 +5,11 @@ import StorefrontClient from '@/components/shop/StorefrontClient';
 import { Eye, Edit2, ArrowLeft } from 'lucide-react';
 
 interface Props {
-    params: { slug: string };
+    params: Promise<{ slug: string }>;
 }
 
 export default async function ShopPage({ params }: Props) {
-    const { slug } = params;
+    const { slug } = await params;
     const supabase = await createClient();
 
     // 1. Fetch the shop by route_path

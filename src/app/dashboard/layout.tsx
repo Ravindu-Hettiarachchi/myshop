@@ -2,14 +2,16 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { useParams, usePathname } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { LayoutDashboard, Palette, Package as PackageIcon, LogOut, ShoppingBag, ExternalLink, ChevronRight } from 'lucide-react';
 import PlatformLogo from '@/components/PlatformLogo';
+import { buildStorefrontUrl } from '@/lib/storefront';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
     const supabase = createClient();
     const pathname = usePathname();
+    const params = useParams<{ shopSlug?: string }>();
     const [displayName, setDisplayName] = useState('...');
     const [shopName, setShopName] = useState('');
     const [routePath, setRoutePath] = useState('');
@@ -18,14 +20,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         const load = async () => {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
-            const { data: owner } = await supabase.from('owners').select('full_name').eq('id', user.id).single();
-            const { data: shop } = await supabase.from('shops').select('shop_name, route_path').eq('owner_id', user.id).single();
+            const { data: owner } = await supabase
+                .from('owners')
+                .select('full_name')
+                .eq('id', user.id)
+                .maybeSingle();
+
+            let shopQuery = supabase
+                .from('shops')
+                .select('shop_name, route_path')
+                .eq('owner_id', user.id)
+                .order('created_at', { ascending: false })
+                .limit(1);
+
+            if (params?.shopSlug) {
+                shopQuery = shopQuery.eq('route_path', params.shopSlug);
+            }
+
+            const { data: shop } = await shopQuery.maybeSingle();
             setDisplayName(owner?.full_name || user.email?.split('@')[0] || 'Shop Owner');
             setShopName(shop?.shop_name || '');
             setRoutePath(shop?.route_path || '');
         };
         load();
-    }, [supabase]);
+    }, [params?.shopSlug, supabase]);
 
     const handleSignOut = async () => {
         await supabase.auth.signOut();
@@ -73,8 +91,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <div className="p-3 border-t border-gray-100 bg-gray-50">
                     {routePath && (
                         <a
-                            href={`/shop/${routePath}`}
+                            href={buildStorefrontUrl(routePath)}
                             target="_blank"
+                            rel="noopener noreferrer"
                             className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition mb-1 group"
                         >
                             <ExternalLink className="w-3.5 h-3.5 text-gray-400 group-hover:text-blue-500" />

@@ -33,7 +33,7 @@ export async function proxy(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
 
     const path = request.nextUrl.pathname;
-    let role = 'customer';
+    let role: 'admin' | 'shop_owner' | 'customer' = 'customer';
 
     if (user) {
         // Fetch role from the owners table
@@ -44,12 +44,10 @@ export async function proxy(request: NextRequest) {
             .from('owners')
             .select('role')
             .eq('id', user.id)
-            .single();
+            .maybeSingle();
 
-        if (ownerData) {
+        if (ownerData?.role === 'admin' || ownerData?.role === 'shop_owner' || ownerData?.role === 'customer') {
             role = ownerData.role;
-        } else {
-            role = 'shop_owner'; // Default assumption for fully signed in but unmapped profiles
         }
     }
 
@@ -65,49 +63,54 @@ export async function proxy(request: NextRequest) {
         }
     }
 
-    // 2. Shop Owner Paths (Dashboard, Onboarding)
-    if (path.startsWith('/dashboard') || path.startsWith('/onboarding')) {
-        if (!user || (role !== 'shop_owner' && role !== 'admin')) {
+    // 2. Shop Owner Paths (Dashboard)
+    if (path.startsWith('/dashboard')) {
+        if (!user || role !== 'shop_owner') {
+            if (user && role === 'admin') {
+                return NextResponse.redirect(new URL('/admin', request.url));
+            }
             // Unauthenticated or non-shop owners are redirected
             return NextResponse.redirect(new URL('/login', request.url));
         }
     }
 
+    // 3. Onboarding should be blocked for admins, available for authenticated non-admin users.
+    if (path.startsWith('/onboarding')) {
+        if (!user) {
+            return NextResponse.redirect(new URL('/login', request.url));
+        }
+        if (role === 'admin') {
+            return NextResponse.redirect(new URL('/admin', request.url));
+        }
+    }
+
     /* --------------------------------------------------------------------------
-     * Optional Subdomain Routing (future opt-in)
-     * Primary storefront mode is path-based: /shop/{route_path}
+     * Subdomain Routing (customer storefront): bike.myshop.com -> /shop/bike
      * -------------------------------------------------------------------------- */
     const hostname = request.headers.get('host');
-    const isProduction = process.env.NODE_ENV === 'production';
-    const rootDomain = isProduction ? 'myshop.com' : 'localhost:3000'; // Replace myshop.com with actual production domain
-    const enableSubdomainRouting = process.env.ENABLE_SUBDOMAIN_ROUTING === 'true';
+    const host = (hostname ?? '').split(':')[0].toLowerCase();
+    const rootDomain = (process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'myshop.com').toLowerCase();
 
-    if (enableSubdomainRouting && hostname && hostname !== rootDomain && !hostname.startsWith('www.')) {
-        // Extract the subdomain (e.g. 'ceylon-spices')
-        const subdomain = hostname.replace(`.${rootDomain}`, '');
+    const isRootHost =
+        host === rootDomain ||
+        host === `www.${rootDomain}` ||
+        host === 'localhost' ||
+        host === '127.0.0.1';
 
-        // Prevent rewriting internal Next.js paths or API routes if they accidentally hit a subdomain
-        if (!path.startsWith('/api') && !path.startsWith('/_next')) {
+    let subdomain: string | null = null;
 
-            if (path === '/') {
-                // Rewrite mapping the root of the subdomain to the dynamic shop route
-                const url = request.nextUrl.clone();
-                url.pathname = `/shop/${subdomain}`;
-                return NextResponse.rewrite(url);
-            }
-
-            // Allow explicit authentication paths on the subdomain for customers
-            if (path.startsWith('/login') || path.startsWith('/signup')) {
-                const url = request.nextUrl.clone();
-                url.pathname = `/shop/${subdomain}${path}`;
-                return NextResponse.rewrite(url);
-            }
-
-            // Fallback: Redirect unrecognized paths back to root of shop
-            const url = request.nextUrl.clone();
-            url.pathname = `/shop/${subdomain}`;
-            return NextResponse.rewrite(url);
+    if (!isRootHost) {
+        if (host.endsWith(`.${rootDomain}`) && !host.startsWith('admin.') && !host.startsWith('www.')) {
+            subdomain = host.replace(`.${rootDomain}`, '');
+        } else if (host.endsWith('.localhost')) {
+            subdomain = host.replace('.localhost', '');
         }
+    }
+
+    if (subdomain && !path.startsWith('/api') && !path.startsWith('/_next') && !path.startsWith('/shop/')) {
+        const url = request.nextUrl.clone();
+        url.pathname = path === '/' ? `/shop/${subdomain}` : `/shop/${subdomain}${path}`;
+        return NextResponse.rewrite(url);
     }
 
     return supabaseResponse;

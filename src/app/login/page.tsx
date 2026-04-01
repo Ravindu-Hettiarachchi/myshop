@@ -52,13 +52,31 @@ export default function LoginPage() {
 
         if (error) { setServerError(error.message); setIsLoading(false); return; }
 
-        const { data: ownerData } = await supabase.from('owners').select('role').eq('id', data.user.id).single();
-        const role = ownerData?.role || 'shop_owner';
+        const { data: ownerData } = await supabase
+            .from('owners')
+            .select('role')
+            .eq('id', data.user.id)
+            .maybeSingle();
+
+        const role = ownerData?.role || 'customer';
         if (role === 'admin') { router.push('/admin'); return; }
 
-        const { data: shops } = await supabase.from('shops').select('id').eq('owner_id', data.user.id).limit(1);
+        if (role === 'shop_owner') {
+            const { data: shop } = await supabase
+                .from('shops')
+                .select('route_path')
+                .eq('owner_id', data.user.id)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            setIsLoading(false);
+            router.push(shop?.route_path ? `/dashboard/${shop.route_path}` : '/setup');
+            return;
+        }
+
         setIsLoading(false);
-        router.push(!shops || shops.length === 0 ? '/setup' : '/dashboard');
+        router.push('/');
     };
 
     const handleGoogleLogin = async () => {

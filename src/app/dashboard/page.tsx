@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { Clock, Store, Plus, Palette, Eye, Package, AlertTriangle } from 'lucide-react';
 import { buildStorefrontUrl } from '@/lib/storefront';
@@ -29,6 +29,7 @@ interface LowStockProduct {
 }
 
 export default function DashboardOverview() {
+    const params = useParams<{ shopSlug?: string }>();
     const searchParams = useSearchParams();
     const supabase = createClient();
     const [shop, setShop] = useState<Shop | null>(null);
@@ -42,6 +43,7 @@ export default function DashboardOverview() {
     const createdUrl = searchParams.get('url');
     const hasCreatedFlag = searchParams.get('created') === '1';
     const storefrontUrl = shop ? buildStorefrontUrl(shop.route_path) : null;
+    const requestedSlug = params?.shopSlug;
 
     const fetchData = useCallback(async () => {
         const { data: { user } } = await supabase.auth.getUser();
@@ -52,15 +54,22 @@ export default function DashboardOverview() {
             .from('owners')
             .select('full_name')
             .eq('id', user.id)
-            .single();
+            .maybeSingle();
         setUserName(owner?.full_name || user.email?.split('@')[0] || 'Shop Owner');
 
-        // Get shop
-        const { data: shopData } = await supabase
+        // Get shop scoped to owner and optional slug route.
+        let shopQuery = supabase
             .from('shops')
             .select('id, shop_name, route_path, is_approved, primary_color')
             .eq('owner_id', user.id)
-            .single();
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        if (requestedSlug) {
+            shopQuery = shopQuery.eq('route_path', requestedSlug);
+        }
+
+        const { data: shopData } = await shopQuery.maybeSingle();
         setShop(shopData);
 
         if (shopData) {
@@ -90,7 +99,7 @@ export default function DashboardOverview() {
         }
 
         setLoading(false);
-    }, [supabase]);
+    }, [requestedSlug, supabase]);
 
     useEffect(() => { fetchData(); }, [fetchData]);
 

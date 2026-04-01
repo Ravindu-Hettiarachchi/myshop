@@ -3,12 +3,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { z } from 'zod';
-import { createClient } from '@/utils/supabase/client';
-import {
-    buildStorefrontUrl,
-    slugifyStorefrontLink,
-    storefrontLinkSchema,
-} from '@/lib/storefront';
+import { slugifyStorefrontLink, storefrontLinkSchema } from '@/lib/storefront';
 
 const onboardingSchema = z.object({
     shopName: z.string().trim().min(2, 'Shop Name is required.'),
@@ -24,7 +19,6 @@ type OnboardingErrors = {
 
 export default function OnboardingPage() {
     const router = useRouter();
-    const supabase = createClient();
 
     const [shopName, setShopName] = useState('');
     const [routePath, setRoutePath] = useState('');
@@ -64,84 +58,29 @@ export default function OnboardingPage() {
             return;
         }
 
-        // 1. Get the current authenticated user driving this onboard
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        const res = await fetch('/api/shops/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                shopName,
+                routePath: normalizedRoutePath,
+            }),
+        });
 
-        if (authError || !user) {
-            setErrorMsg("Authentication required. Please log in before registering a business.");
-            setIsSubmitting(false);
-            return;
-        }
+        const json = await res.json();
 
-        // 2. Check if the owner record exists in the public.owners table
-        const { error: ownerError } = await supabase
-            .from('owners')
-            .select('id')
-            .eq('id', user.id)
-            .single();
-
-        if (ownerError && ownerError.code === 'PGRST116') {
-            // Owner record doesn't exist, we must create it first before creating a shop
-            const { error: insertOwnerError } = await supabase.from('owners').insert([{
-                id: user.id,
-                email: user.email,
-                role: 'shop_owner'
-            }]);
-
-            if (insertOwnerError) {
-                setErrorMsg("Failed to initialize your user profile: " + insertOwnerError.message);
-                setIsSubmitting(false);
-                return;
-            }
-        } else if (ownerError) {
-            setErrorMsg("Error verifying user profile: " + ownerError.message);
-            setIsSubmitting(false);
-            return;
-        }
-
-        // 3. We don't have category, brNumber, or description in our DB schema right now, 
-        // so we purposefully ignore them to protect the insert statement. We only push what fits!
-        const { data: existingShop, error: existingShopError } = await supabase
-            .from('shops')
-            .select('id')
-            .eq('route_path', normalizedRoutePath)
-            .limit(1);
-
-        if (existingShopError) {
-            setErrorMsg('Unable to validate storefront link right now. Please try again.');
-            setIsSubmitting(false);
-            return;
-        }
-
-        if (existingShop && existingShop.length > 0) {
-            setFieldErrors({ routePath: 'This storefront link is already taken. Please choose another.' });
-            setIsSubmitting(false);
-            return;
-        }
-
-        const payload = {
-            owner_id: user.id,
-            shop_name: shopName.trim(),
-            route_path: normalizedRoutePath,
-            is_approved: false // Explicitly enforcing Pre-Live mode!
-        }
-
-        // 4. Connect to Supabase to inject shop
-        const { error: insertError } = await supabase.from('shops').insert([payload]);
-
-        if (insertError) {
-            // Usually this throws if the routePath violates the UNIQUE database constraint we added
-            if (insertError.code === '23505') {
+        if (!res.ok) {
+            if (res.status === 409) {
                 setFieldErrors({ routePath: 'This storefront link is already taken. Please choose another.' });
             } else {
-                setErrorMsg(insertError.message);
+                setErrorMsg(json.error || 'Failed to create your shop.');
             }
             setIsSubmitting(false);
             return;
         }
 
         setIsSubmitting(false);
-        router.push(`/dashboard?created=1&route=${encodeURIComponent(normalizedRoutePath)}&url=${encodeURIComponent(buildStorefrontUrl(normalizedRoutePath))}`);
+        router.push(json.dashboardPath || `/dashboard/${normalizedRoutePath}`);
     };
 
     return (
