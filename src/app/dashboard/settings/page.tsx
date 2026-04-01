@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { Store, Palette, Type, Settings, ExternalLink, UploadCloud, X, ImageIcon } from 'lucide-react';
+import { buildStorefrontUrl } from '@/lib/storefront';
 
 // Themes are now loaded from the database (managed by the admin panel)
 
@@ -173,6 +174,8 @@ export default function DashboardSettingsPage() {
         );
     }
 
+    const storefrontUrl = buildStorefrontUrl(shop.route_path);
+
     return (
         <div className="flex-1 p-6 lg:p-8 space-y-6 overflow-auto">
             {/* Header */}
@@ -181,7 +184,7 @@ export default function DashboardSettingsPage() {
                     <h1 className="text-2xl font-bold text-gray-900">Storefront Settings</h1>
                     <p className="text-sm text-gray-500 mt-1">
                         Customize how your shop looks to customers at{' '}
-                        <a href={`/shop/${shop.route_path}`} target="_blank" className="text-blue-600 hover:underline">
+                        <a href={storefrontUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
                             /shop/{shop.route_path}
                         </a>
                     </p>
@@ -464,8 +467,9 @@ export default function DashboardSettingsPage() {
                     <p className="text-xs text-blue-600 mt-0.5">Remember to save changes before previewing!</p>
                 </div>
                 <a
-                    href={`/shop/${shop.route_path}`}
+                    href={storefrontUrl}
                     target="_blank"
+                    rel="noopener noreferrer"
                     className="bg-blue-600 text-white text-sm px-5 py-2.5 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
                 >
                     <span>Open Shop</span>

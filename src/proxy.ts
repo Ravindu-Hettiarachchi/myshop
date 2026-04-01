@@ -74,13 +74,15 @@ export async function proxy(request: NextRequest) {
     }
 
     /* --------------------------------------------------------------------------
-     * Subdomain Routing Logic (e.g., shopname.myshop.com -> /shop/shopname)
+     * Optional Subdomain Routing (future opt-in)
+     * Primary storefront mode is path-based: /shop/{route_path}
      * -------------------------------------------------------------------------- */
     const hostname = request.headers.get('host');
     const isProduction = process.env.NODE_ENV === 'production';
     const rootDomain = isProduction ? 'myshop.com' : 'localhost:3000'; // Replace myshop.com with actual production domain
+    const enableSubdomainRouting = process.env.ENABLE_SUBDOMAIN_ROUTING === 'true';
 
-    if (hostname && hostname !== rootDomain && !hostname.startsWith('www.')) {
+    if (enableSubdomainRouting && hostname && hostname !== rootDomain && !hostname.startsWith('www.')) {
         // Extract the subdomain (e.g. 'ceylon-spices')
         const subdomain = hostname.replace(`.${rootDomain}`, '');
 

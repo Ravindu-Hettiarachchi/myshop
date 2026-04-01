@@ -2,8 +2,10 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { Clock, Store, Plus, Palette, Eye, Package, AlertTriangle } from 'lucide-react';
+import { buildStorefrontUrl } from '@/lib/storefront';
 
 interface Shop {
     id: string;
@@ -19,14 +21,27 @@ interface OrderStats {
     revenue: number;
 }
 
+interface LowStockProduct {
+    id: string;
+    title: string;
+    stock_quantity: number;
+    low_stock_threshold: number;
+}
+
 export default function DashboardOverview() {
+    const searchParams = useSearchParams();
     const supabase = createClient();
     const [shop, setShop] = useState<Shop | null>(null);
     const [userName, setUserName] = useState('');
     const [orderStats, setOrderStats] = useState<OrderStats>({ total: 0, processing: 0, revenue: 0 });
     const [lowStockCount, setLowStockCount] = useState(0);
-    const [lowStockProducts, setLowStockProducts] = useState<any[]>([]);
+    const [lowStockProducts, setLowStockProducts] = useState<LowStockProduct[]>([]);
     const [loading, setLoading] = useState(true);
+
+    const createdRoute = searchParams.get('route');
+    const createdUrl = searchParams.get('url');
+    const hasCreatedFlag = searchParams.get('created') === '1';
+    const storefrontUrl = shop ? buildStorefrontUrl(shop.route_path) : null;
 
     const fetchData = useCallback(async () => {
         const { data: { user } } = await supabase.auth.getUser();
@@ -100,14 +115,47 @@ export default function DashboardOverview() {
                     <div className="flex-1">
                         <h3 className="font-bold text-amber-900">Your shop is under review</h3>
                         <p className="text-sm text-amber-700 mt-1">
-                            Our team is verifying your business details. Once approved, your shop at{' '}
+                            Your shop has been created and is pending admin approval. Once approved, your shop at{' '}
                             <span className="font-mono font-semibold">/shop/{shop.route_path}</span> will go live for customers.
-                            You can still customize your storefront in the meantime!
+                            You can still preview and customize it in the meantime.
                         </p>
                     </div>
-                    <Link href="/dashboard/settings" className="text-sm bg-amber-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-amber-700 transition whitespace-nowrap">
-                        Customize Store
-                    </Link>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                        {storefrontUrl && (
+                            <a
+                                href={storefrontUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-sm bg-white text-amber-700 px-4 py-2 rounded-lg font-medium border border-amber-300 hover:bg-amber-100 transition whitespace-nowrap"
+                            >
+                                Preview Store
+                            </a>
+                        )}
+                        <Link href="/dashboard/settings" className="text-sm bg-amber-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-amber-700 transition whitespace-nowrap">
+                            Customize Store
+                        </Link>
+                    </div>
+                </div>
+            )}
+
+            {hasCreatedFlag && createdRoute && (
+                <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <p className="text-sm font-semibold text-blue-900">Shop created successfully</p>
+                        <p className="text-sm text-blue-700">
+                            Your storefront path is <span className="font-mono font-semibold">/shop/{createdRoute}</span>
+                        </p>
+                    </div>
+                    {createdUrl && (
+                        <a
+                            href={createdUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition"
+                        >
+                            Open Storefront ↗
+                        </a>
+                    )}
                 </div>
             )}
 
@@ -120,9 +168,9 @@ export default function DashboardOverview() {
                     </span>
                     <p className="text-green-800 font-medium text-sm flex-1">
                         Your shop is <strong>Live</strong> at{' '}
-                        <a href={`/shop/${shop.route_path}`} target="_blank" className="underline font-mono">/shop/{shop.route_path}</a>
+                        <a href={storefrontUrl || '#'} target="_blank" rel="noopener noreferrer" className="underline font-mono">/shop/{shop.route_path}</a>
                     </p>
-                    <a href={`/shop/${shop.route_path}`} target="_blank" className="text-sm bg-green-700 text-white px-4 py-2 rounded-lg font-medium hover:bg-green-800 transition">
+                    <a href={storefrontUrl || '#'} target="_blank" rel="noopener noreferrer" className="text-sm bg-green-700 text-white px-4 py-2 rounded-lg font-medium hover:bg-green-800 transition">
                         View Live Store ↗
                     </a>
                 </div>
@@ -195,9 +243,9 @@ export default function DashboardOverview() {
                 {[
                     { label: 'Add Product', href: '/dashboard/products', icon: Plus },
                     { label: 'Storefront Settings', href: '/dashboard/settings', icon: Palette },
-                    { label: 'Preview Store', href: shop ? `/shop/${shop.route_path}` : '#', icon: Eye, external: true },
-                    { label: 'View Orders', href: '#', icon: Package },
-                ].map((action, i) => (
+                    { label: 'Preview Store', href: storefrontUrl || '/onboarding', icon: Eye, external: !!storefrontUrl },
+                    { label: 'View Orders', href: '/dashboard/orders', icon: Package },
+                ].map((action) => (
                     <Link
                         key={action.label}
                         href={action.href}
@@ -215,7 +263,7 @@ export default function DashboardOverview() {
                     <div className="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center mb-4 text-blue-600">
                         <Store className="w-8 h-8" />
                     </div>
-                    <h3 className="text-lg font-bold text-blue-900 mb-2">You don't have a shop yet!</h3>
+                    <h3 className="text-lg font-bold text-blue-900 mb-2">You don&apos;t have a shop yet!</h3>
                     <p className="text-blue-700 text-sm mb-5">Complete the onboarding process to create your storefront.</p>
                     <Link href="/onboarding" className="bg-blue-600 text-white px-6 py-3 rounded-xl font-medium hover:bg-blue-700 transition">
                         Start Shop Setup →

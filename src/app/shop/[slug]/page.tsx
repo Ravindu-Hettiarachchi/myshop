@@ -2,14 +2,14 @@ import { createClient } from '@/utils/supabase/server';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import StorefrontClient from '@/components/shop/StorefrontClient';
-import { Clock, Eye, Edit2, ArrowLeft } from 'lucide-react';
+import { Eye, Edit2, ArrowLeft } from 'lucide-react';
 
 interface Props {
-    params: Promise<{ slug: string }>;
+    params: { slug: string };
 }
 
 export default async function ShopPage({ params }: Props) {
-    const { slug } = await params;
+    const { slug } = params;
     const supabase = await createClient();
 
     // 1. Fetch the shop by route_path
@@ -34,39 +34,11 @@ export default async function ShopPage({ params }: Props) {
     const { data: { user } } = await supabase.auth.getUser();
     const isOwner = user?.id === shop.owner_id;
 
-    // If shop is NOT approved AND the viewer is NOT the owner → show Coming Soon
+    // Path-based storefront policy:
+    // - Owner can preview an unapproved shop
+    // - Public visitors should only access approved shops
     if (!shop.is_approved && !isOwner) {
-        return (
-            <div
-                className="min-h-screen flex items-center justify-center"
-                style={{
-                    fontFamily: `'${shop.font || 'Inter'}', sans-serif`,
-                    background: `linear-gradient(135deg, ${shop.primary_color || '#3B82F6'}15, #f9fafb)`
-                }}
-            >
-                <div className="text-center max-w-lg mx-auto px-6">
-                    <div
-                        style={{ backgroundColor: shop.primary_color || '#3B82F6' }}
-                        className="w-20 h-20 rounded-2xl flex items-center justify-center text-white font-bold text-4xl mx-auto mb-6 shadow-xl"
-                    >
-                        {shop.shop_name[0]}
-                    </div>
-                    <h1 className="text-4xl font-bold text-gray-900 mb-3">{shop.shop_name}</h1>
-                    {shop.tagline && <p className="text-gray-500 text-lg mb-6">{shop.tagline}</p>}
-                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 flex flex-col items-center">
-                        <Clock className="w-12 h-12 text-gray-300 mb-4" />
-                        <h2 className="text-xl font-semibold text-gray-800 mb-2">Coming Soon!</h2>
-                        <p className="text-gray-500 text-sm">
-                            This shop is currently under review. We&apos;re verifying their business details.
-                            Check back soon — it won&apos;t be long!
-                        </p>
-                    </div>
-                    <p className="mt-8 text-xs text-gray-400">
-                        Powered by <span style={{ color: shop.primary_color || '#3B82F6' }} className="font-semibold">MyShop</span>
-                    </p>
-                </div>
-            </div>
-        );
+        notFound();
     }
 
     // Fetch products — both for approved shops (public) and for owner preview
@@ -125,11 +97,11 @@ export default async function ShopPage({ params }: Props) {
                 </div>
 
                 {/* Actual Storefront (fully rendered, just not public) */}
-                <StorefrontClient routePath={slug} shopConfig={shopConfig as any} productList={productList} sessionUserInit={user} themeConfig={resolvedTheme} />
+                <StorefrontClient routePath={slug} shopConfig={shopConfig} productList={productList} sessionUserInit={user} themeConfig={resolvedTheme} />
             </div>
         );
     }
 
     // Fully live shop — render without any banner
-    return <StorefrontClient routePath={slug} shopConfig={shopConfig as any} productList={productList} sessionUserInit={user} themeConfig={resolvedTheme} />;
+    return <StorefrontClient routePath={slug} shopConfig={shopConfig} productList={productList} sessionUserInit={user} themeConfig={resolvedTheme} />;
 }

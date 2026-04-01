@@ -71,7 +71,7 @@ export default function SetupInstructionPage() {
                         <CheckCircle2 className="w-3.5 h-3.5" /> Account Verified
                     </div>
                     <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 tracking-tight">
-                        Welcome, {userName}. Let's get you set up.
+                        Welcome, {userName}. Let&apos;s get you set up.
                     </h1>
                     <p className="mt-2 text-lg text-gray-600">
                         Before you create your shop, please review this quick guide on how our platform works, what we provide, and the verification process.
@@ -95,7 +95,7 @@ export default function SetupInstructionPage() {
                                 <h3 className="text-lg font-bold text-gray-900">Limitless Customization</h3>
                             </div>
                             <p className="text-gray-600 leading-relaxed">
-                                You have total control over your brand. Use our template engine to upload logos, pick custom brand colors, switch between light/dark modes, and render a beautiful, dynamic storefront on your unique `shopname.myshop.com` subdomain.
+                                You have total control over your brand. Use our template engine to upload logos, pick custom brand colors, switch between light/dark modes, and render a beautiful, dynamic storefront on your unique path-based URL like <span className="font-mono text-gray-800">myshop.com/shop/shopname</span>.
                             </p>
                         </div>
                         <div className="w-full md:w-1/3 bg-gray-50 flex items-center justify-center p-6 border-t md:border-t-0 md:border-l border-gray-100 h-full min-h-[250px] relative overflow-hidden">

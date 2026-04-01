@@ -2,7 +2,25 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { z } from 'zod';
 import { createClient } from '@/utils/supabase/client';
+import {
+    buildStorefrontUrl,
+    slugifyStorefrontLink,
+    storefrontLinkSchema,
+} from '@/lib/storefront';
+
+const onboardingSchema = z.object({
+    shopName: z.string().trim().min(2, 'Shop Name is required.'),
+    routePath: storefrontLinkSchema,
+    category: z.string().trim().min(1, 'Please select a business category.'),
+});
+
+type OnboardingErrors = {
+    shopName?: string;
+    routePath?: string;
+    category?: string;
+};
 
 export default function OnboardingPage() {
     const router = useRouter();
@@ -18,7 +36,7 @@ export default function OnboardingPage() {
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
-    const [fieldErrors, setFieldErrors] = useState<{ shopName?: string; routePath?: string; category?: string }>({});
+    const [fieldErrors, setFieldErrors] = useState<OnboardingErrors>({});
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -26,14 +44,21 @@ export default function OnboardingPage() {
         setErrorMsg(null);
         setFieldErrors({});
 
-        // Custom validation
-        const errors: { shopName?: string; routePath?: string; category?: string } = {};
-        if (!shopName.trim()) errors.shopName = 'Shop Name is required.';
-        if (!routePath.trim()) errors.routePath = 'Storefront Link is required.';
-        else if (!/^[a-z0-9-]+$/.test(routePath)) errors.routePath = 'Link can only contain lowercase letters, numbers, and hyphens.';
-        if (!category) errors.category = 'Please select a business category.';
+        const normalizedRoutePath = slugifyStorefrontLink(routePath);
+        setRoutePath(normalizedRoutePath);
 
-        if (Object.keys(errors).length > 0) {
+        const validation = onboardingSchema.safeParse({
+            shopName,
+            routePath: normalizedRoutePath,
+            category,
+        });
+
+        if (!validation.success) {
+            const errors: OnboardingErrors = {};
+            for (const issue of validation.error.issues) {
+                const field = issue.path[0] as keyof OnboardingErrors;
+                errors[field] = issue.message;
+            }
             setFieldErrors(errors);
             setIsSubmitting(false);
             return;
@@ -49,7 +74,7 @@ export default function OnboardingPage() {
         }
 
         // 2. Check if the owner record exists in the public.owners table
-        const { data: ownerData, error: ownerError } = await supabase
+        const { error: ownerError } = await supabase
             .from('owners')
             .select('id')
             .eq('id', user.id)
@@ -76,10 +101,28 @@ export default function OnboardingPage() {
 
         // 3. We don't have category, brNumber, or description in our DB schema right now, 
         // so we purposefully ignore them to protect the insert statement. We only push what fits!
+        const { data: existingShop, error: existingShopError } = await supabase
+            .from('shops')
+            .select('id')
+            .eq('route_path', normalizedRoutePath)
+            .limit(1);
+
+        if (existingShopError) {
+            setErrorMsg('Unable to validate storefront link right now. Please try again.');
+            setIsSubmitting(false);
+            return;
+        }
+
+        if (existingShop && existingShop.length > 0) {
+            setFieldErrors({ routePath: 'This storefront link is already taken. Please choose another.' });
+            setIsSubmitting(false);
+            return;
+        }
+
         const payload = {
             owner_id: user.id,
-            shop_name: shopName,
-            route_path: routePath,
+            shop_name: shopName.trim(),
+            route_path: normalizedRoutePath,
             is_approved: false // Explicitly enforcing Pre-Live mode!
         }
 
@@ -89,7 +132,7 @@ export default function OnboardingPage() {
         if (insertError) {
             // Usually this throws if the routePath violates the UNIQUE database constraint we added
             if (insertError.code === '23505') {
-                setErrorMsg(`The storefront link "${routePath}" is already taken! Please choose another.`);
+                setFieldErrors({ routePath: 'This storefront link is already taken. Please choose another.' });
             } else {
                 setErrorMsg(insertError.message);
             }
@@ -98,8 +141,7 @@ export default function OnboardingPage() {
         }
 
         setIsSubmitting(false);
-        alert("Business Data Submitted! Please wait for Admin Verification. You will now be redirected to your dashboard view.");
-        router.push('/dashboard');
+        router.push(`/dashboard?created=1&route=${encodeURIComponent(normalizedRoutePath)}&url=${encodeURIComponent(buildStorefrontUrl(normalizedRoutePath))}`);
     };
 
     return (
@@ -159,7 +201,8 @@ export default function OnboardingPage() {
                                             name="routePath"
                                             id="routePath"
                                             value={routePath}
-                                            onChange={(e) => setRoutePath(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                                            onChange={(e) => setRoutePath(slugifyStorefrontLink(e.target.value))}
+                                            onBlur={(e) => setRoutePath(slugifyStorefrontLink(e.target.value))}
                                             className={`flex-1 focus:ring-blue-500 block w-full min-w-0 rounded-none rounded-r-md sm:text-sm p-2 border ${fieldErrors.routePath ? 'border-red-300 focus:border-red-500' : 'border-gray-300 focus:border-blue-500'} text-gray-900 bg-white font-medium`}
                                             placeholder="ceylon-spices"
                                         />
