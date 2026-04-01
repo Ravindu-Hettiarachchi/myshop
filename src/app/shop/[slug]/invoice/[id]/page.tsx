@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { MapPin, Phone, Mail, FileText, Truck } from 'lucide-react';
 import Link from 'next/link';
 import PrintButton from './PrintButton';
+import { formatPriceWithUnit, formatQuantityLabel } from '@/lib/products';
 
 export const revalidate = 0;
 
@@ -22,6 +23,10 @@ interface InvoiceOrderItem {
     product_id: string;
     quantity: number;
     unit_price: number;
+    ordered_quantity: number | null;
+    ordered_unit: string | null;
+    selling_unit_value: number | null;
+    selling_unit: string | null;
     products: {
         title: string | null;
         image_urls: string[] | null;
@@ -65,7 +70,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ slug: 
         .select(`
             *,
             order_items (
-                id, product_id, quantity, unit_price,
+                id, product_id, quantity, unit_price, ordered_quantity, ordered_unit, selling_unit_value, selling_unit,
                 products ( title, image_urls )
             )
         `)
@@ -257,10 +262,15 @@ export default async function InvoicePage({ params }: { params: Promise<{ slug: 
                                                         />
                                                     )}
                                                     <p className="font-semibold text-gray-900">{item.products?.title || 'Product'}</p>
+                                                    <p className="text-xs text-gray-400">
+                                                        {formatQuantityLabel(item.ordered_quantity ?? item.quantity, item.ordered_unit ?? item.selling_unit ?? 'item')}
+                                                    </p>
                                                 </div>
                                             </td>
-                                            <td className="py-4 text-center font-mono text-gray-500">{item.quantity}</td>
-                                            <td className="py-4 text-right font-mono text-gray-500">Rs. {Number(item.unit_price).toFixed(2)}</td>
+                                            <td className="py-4 text-center font-mono text-gray-500">x{item.quantity}</td>
+                                            <td className="py-4 text-right font-mono text-gray-500">
+                                                {formatPriceWithUnit(item.unit_price, item.selling_unit ?? item.ordered_unit ?? 'item', item.selling_unit_value ?? 1)}
+                                            </td>
                                             <td className="py-4 text-right font-mono font-bold text-gray-900">Rs. {Number(lineTotal).toFixed(2)}</td>
                                         </tr>
                                     );

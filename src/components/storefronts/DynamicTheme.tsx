@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { ShoppingCart, ChevronRight, ArrowRight } from 'lucide-react';
+import { formatPriceWithUnit, normalizeSellingUnit, normalizeUnitValue, type ProductUnit } from '@/lib/products';
 
 export interface DynamicThemeConfig {
     // Basic
@@ -54,6 +55,8 @@ interface Product {
     title: string;
     description: string;
     price: number;
+    selling_unit_value: number;
+    selling_unit: ProductUnit;
     stock_quantity: number;
     image_urls?: string[];
     image?: string;
@@ -62,10 +65,10 @@ interface Product {
 interface Props {
     shop: Shop;
     products: Product[];
-    onAddToCart: (product: any) => void;
+    onAddToCart: (product: Product) => void;
     onOpenCart: () => void;
     cartCount: number;
-    sessionUser: any;
+    sessionUser: unknown;
     themeConfig: DynamicThemeConfig;
 }
 
@@ -171,6 +174,8 @@ export default function DynamicTheme({
 
     const productList = products.map(p => ({
         ...p,
+        selling_unit_value: normalizeUnitValue(p.selling_unit_value),
+        selling_unit: normalizeSellingUnit(p.selling_unit),
         image: p.image_urls?.[0] || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=600&q=80',
     }));
 
@@ -471,7 +476,7 @@ export default function DynamicTheme({
 
                                         <div className="flex items-center justify-between mt-auto pt-3 gap-2 flex-wrap">
                                             <p style={{ color: c.accent_color, fontWeight: 800 }} className="text-base">
-                                                රු {Number(product.price).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                {formatPriceWithUnit(Number(product.price), product.selling_unit, product.selling_unit_value)}
                                             </p>
                                             {renderBtn(outOfStock ? 'Sold Out' : 'Add to Cart', () => onAddToCart(product), outOfStock)}
                                         </div>

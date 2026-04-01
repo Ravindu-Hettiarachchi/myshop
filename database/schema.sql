@@ -46,8 +46,11 @@ CREATE TABLE products (
     title VARCHAR(200) NOT NULL,
     description TEXT,
     price DECIMAL(10, 2) NOT NULL,
-    stock_quantity INTEGER DEFAULT 0,
-    low_stock_threshold INTEGER DEFAULT 5, -- Triggers realtime Supabase alerts
+    selling_unit_value DECIMAL(10, 3) NOT NULL DEFAULT 1 CHECK (selling_unit_value > 0),
+    selling_unit TEXT NOT NULL DEFAULT 'item' CHECK (selling_unit IN ('item', 'kg', 'g', 'litre', 'ml', 'pack')),
+    stock_quantity DECIMAL(12, 3) NOT NULL DEFAULT 0 CHECK (stock_quantity >= 0),
+    stock_unit TEXT NOT NULL DEFAULT 'item' CHECK (stock_unit IN ('item', 'kg', 'g', 'litre', 'ml', 'pack')),
+    low_stock_threshold DECIMAL(12, 3) NOT NULL DEFAULT 5 CHECK (low_stock_threshold >= 0), -- Triggers realtime alerts
     image_urls TEXT[], -- Multi-image gallery URLs
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -158,10 +161,10 @@ INSERT INTO shops (id, owner_id, shop_name, route_path, is_approved, template, p
 ('33333333-3333-3333-3333-333333333333', '11111111-1111-1111-1111-111111111111', 'Ceylon Spice House', 'ceylon-spices', true, 'minimal-white', '#D97706', 'Inter', 'Authentic flavors from the island of spices'),
 ('44444444-4444-4444-4444-444444444444', '22222222-2222-2222-2222-222222222222', 'Lanka Batiks', 'lanka-batiks', true, 'elegant-boutique', '#7C3AED', 'Playfair Display', 'Handcrafted Sri Lankan textiles');
 
-INSERT INTO products (shop_id, title, description, price, stock_quantity, low_stock_threshold, image_urls) VALUES
-('33333333-3333-3333-3333-333333333333', 'Premium Cinnamon Sticks', 'Pure Ceylon Cinnamon from Galle.', 1500.00, 50, 10, ARRAY['cinnamon1.jpg', 'cinnamon2.jpg']),
-('33333333-3333-3333-3333-333333333333', 'Roasted Curry Powder', 'Traditional recipe for spicy curries.', 800.00, 3, 5, ARRAY['curry.jpg']), -- This has stock 3 with threshold 5, triggering low stock alert
-('44444444-4444-4444-4444-444444444444', 'Handloom Saree', 'Beautifully crafted handloom saree.', 12000.00, 15, 3, ARRAY['saree1.jpg', 'saree2.jpg']);
+INSERT INTO products (shop_id, title, description, price, selling_unit_value, selling_unit, stock_quantity, stock_unit, low_stock_threshold, image_urls) VALUES
+('33333333-3333-3333-3333-333333333333', 'Premium Cinnamon Sticks', 'Pure Ceylon Cinnamon from Galle.', 1500.00, 1, 'pack', 50, 'pack', 10, ARRAY['cinnamon1.jpg', 'cinnamon2.jpg']),
+('33333333-3333-3333-3333-333333333333', 'Roasted Curry Powder', 'Traditional recipe for spicy curries.', 800.00, 100, 'g', 5000, 'g', 500, ARRAY['curry.jpg']), -- This has stock 5000g with threshold 500g
+('44444444-4444-4444-4444-444444444444', 'Handloom Saree', 'Beautifully crafted handloom saree.', 12000.00, 1, 'item', 15, 'item', 3, ARRAY['saree1.jpg', 'saree2.jpg']);
 
 ---------------------------------------------------------------------------------
 -- MIGRATION SCRIPT: Run this in Supabase SQL Editor if shops table already exists
@@ -181,8 +184,21 @@ INSERT INTO products (shop_id, title, description, price, stock_quantity, low_st
 --   ADD COLUMN IF NOT EXISTS tax_rate DECIMAL(5, 2) DEFAULT 0.00;
 --
 -- ALTER TABLE products
---   ADD COLUMN IF NOT EXISTS stock_quantity INTEGER DEFAULT 0,
---   ADD COLUMN IF NOT EXISTS low_stock_threshold INTEGER DEFAULT 5;
+--   ADD COLUMN IF NOT EXISTS selling_unit_value DECIMAL(10, 3) DEFAULT 1,
+--   ADD COLUMN IF NOT EXISTS selling_unit TEXT DEFAULT 'item',
+--   ADD COLUMN IF NOT EXISTS stock_quantity DECIMAL(12, 3) DEFAULT 0,
+--   ADD COLUMN IF NOT EXISTS stock_unit TEXT DEFAULT 'item',
+--   ADD COLUMN IF NOT EXISTS low_stock_threshold DECIMAL(12, 3) DEFAULT 5;
+--
+-- -- Backward compatibility from older columns:
+-- UPDATE products
+-- SET selling_unit_value = COALESCE(selling_unit_value, unit_value, 1);
+--
+-- UPDATE products
+-- SET selling_unit = COALESCE(selling_unit, unit, 'item');
+--
+-- UPDATE products
+-- SET stock_unit = COALESCE(stock_unit, selling_unit, unit, 'item');
 --
 -- CREATE TABLE IF NOT EXISTS order_items (
 --     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

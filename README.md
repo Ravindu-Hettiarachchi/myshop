@@ -88,3 +88,21 @@ using (bucket_id = 'shop-assets');
 
 - Files are uploaded to paths like: `<shop_id>/products/<generated-file-name>`
 - Product rows store `image_urls` (public URLs) for rendering in dashboard/storefront.
+
+## Product selling units (required migration)
+
+To support quantity + unit pricing (e.g., `Rs. 180 / 500g`), run:
+
+- `database/add_product_unit.sql`
+
+This migration adds:
+
+- `products.selling_unit_value` (positive numeric quantity, default `1`)
+- `products.selling_unit` with allowed values:
+- `products.stock_unit` with allowed values:
+- `products.stock_quantity` as decimal for future fractional inventory support
+
+- `item`, `kg`, `g`, `litre`, `ml`, `pack`
+
+Existing products are backfilled from legacy `unit/unit_value` into
+`selling_unit/selling_unit_value` and `stock_unit`, with safe defaults.

@@ -2,16 +2,45 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@/utils/supabase/client';
-import { PackageSearch, Plus, Search, AlertTriangle, Edit, Trash2, CheckCircle2, X, Loader2, UploadCloud, ImageIcon, Image } from 'lucide-react';
+import { PackageSearch, Plus, Search, AlertTriangle, Edit, Trash2, CheckCircle2, X, Loader2, UploadCloud, Image } from 'lucide-react';
 import { uploadToShopAssets } from '@/lib/storage/shopAssets';
+import {
+    DEFAULT_PRODUCT_UNIT,
+    DEFAULT_STOCK_UNIT,
+    DEFAULT_UNIT_VALUE,
+    formatPriceWithUnit,
+    formatStockWithUnit,
+    getUnitLabel,
+    normalizeSellingUnit,
+    normalizeStockUnit,
+    normalizeUnitValue,
+    PRODUCT_UNITS,
+    productUpsertSchema,
+    type ProductUnit,
+} from '@/lib/products';
 
 interface ProductRecord {
     id: string;
     title: string;
     description: string | null;
     price: number;
+    selling_unit_value: number;
+    selling_unit: ProductUnit;
     stock_quantity: number;
+    stock_unit: ProductUnit;
     low_stock_threshold: number | null;
+    image_urls: string[];
+}
+
+interface ProductFormState {
+    title: string;
+    description: string;
+    price: string;
+    selling_unit_value: string;
+    selling_unit: ProductUnit;
+    stock_quantity: string;
+    stock_unit: ProductUnit;
+    low_stock_threshold: string;
     image_urls: string[];
 }
 
@@ -28,8 +57,8 @@ export default function ProductsDashboard() {
     const [isUploading, setIsUploading] = useState(false);
     const [uploadError, setUploadError] = useState<string | null>(null);
     const [formError, setFormError] = useState<string | null>(null);
-    const [formData, setFormData] = useState({
-        title: '', description: '', price: '', stock_quantity: 0, low_stock_threshold: 5, image_urls: [] as string[]
+    const [formData, setFormData] = useState<ProductFormState>({
+        title: '', description: '', price: '', selling_unit_value: DEFAULT_UNIT_VALUE.toString(), selling_unit: DEFAULT_PRODUCT_UNIT, stock_quantity: '0', stock_unit: DEFAULT_STOCK_UNIT, low_stock_threshold: '5', image_urls: []
     });
 
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -43,7 +72,14 @@ export default function ProductsDashboard() {
             if (shop) {
                 setShopId(shop.id);
                 const { data } = await supabase.from('products').select('*').eq('shop_id', shop.id).order('created_at', { ascending: false });
-                setProducts(data || []);
+                const normalizedProducts = (data || []).map((product) => ({
+                    ...product,
+                    selling_unit_value: normalizeUnitValue(product.selling_unit_value ?? product.unit_value),
+                    selling_unit: normalizeSellingUnit(product.selling_unit ?? product.unit),
+                    stock_quantity: Number(product.stock_quantity ?? 0),
+                    stock_unit: normalizeStockUnit(product.stock_unit ?? product.selling_unit ?? product.unit),
+                }));
+                setProducts(normalizedProducts);
             }
             setLoading(false);
         }
@@ -58,8 +94,15 @@ export default function ProductsDashboard() {
         setFormError(null);
         setFormData(product ? {
             title: product.title, description: product.description || '', price: product.price.toString(),
-            stock_quantity: product.stock_quantity, low_stock_threshold: product.low_stock_threshold || 5, image_urls: product.image_urls || []
-        } : { title: '', description: '', price: '', stock_quantity: 0, low_stock_threshold: 5, image_urls: [] });
+            selling_unit_value: normalizeUnitValue(product.selling_unit_value).toString(),
+            selling_unit: normalizeSellingUnit(product.selling_unit),
+            stock_quantity: Number(product.stock_quantity || 0).toString(),
+            stock_unit: normalizeStockUnit(product.stock_unit),
+            low_stock_threshold: Number(product.low_stock_threshold || 5).toString(), image_urls: product.image_urls || []
+        } : {
+            title: '', description: '', price: '', selling_unit_value: DEFAULT_UNIT_VALUE.toString(), selling_unit: DEFAULT_PRODUCT_UNIT,
+            stock_quantity: '0', stock_unit: DEFAULT_STOCK_UNIT, low_stock_threshold: '5', image_urls: []
+        });
         setIsModalOpen(true);
     };
 
@@ -97,30 +140,121 @@ export default function ProductsDashboard() {
         setFormData(prev => ({ ...prev, image_urls: prev.image_urls.filter(u => u !== url) }));
     };
 
+    const getSupabaseErrorMessage = (err: unknown): string => {
+        if (err instanceof Error) return err.message;
+        if (err && typeof err === 'object') {
+            const maybe = err as { message?: unknown; details?: unknown; hint?: unknown; code?: unknown };
+            const parts = [maybe.message, maybe.details, maybe.hint, maybe.code]
+                .filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
+            if (parts.length > 0) return parts.join(' | ');
+        }
+        return 'Failed to save product.';
+    };
+
+    const isProductsSchemaMismatch = (message: string): boolean => {
+        const lower = message.toLowerCase();
+        return (
+            (lower.includes('column') && (lower.includes('selling_unit') || lower.includes('stock_unit') || lower.includes('selling_unit_value'))) ||
+            lower.includes('schema cache') ||
+            lower.includes('pgrst204')
+        );
+    };
+
     const handleSave = async () => {
         if (!shopId) return;
         setFormError(null);
         setIsSaving(true);
         try {
-            const payload = {
-                shop_id: shopId, title: formData.title, description: formData.description,
-                price: parseFloat(formData.price), stock_quantity: formData.stock_quantity,
+            const parsed = productUpsertSchema.safeParse({
+                title: formData.title,
+                description: formData.description,
+                price: formData.price,
+                selling_unit_value: formData.selling_unit_value,
+                selling_unit: formData.selling_unit,
+                stock_quantity: formData.stock_quantity,
+                stock_unit: formData.stock_unit,
                 low_stock_threshold: formData.low_stock_threshold,
-                image_urls: formData.image_urls.filter(u => u.trim() !== '')
+                image_urls: formData.image_urls.filter(u => u.trim() !== ''),
+            });
+
+            if (!parsed.success) {
+                setFormError(parsed.error.issues[0]?.message || 'Invalid product details.');
+                return;
+            }
+
+            const payload = {
+                shop_id: shopId,
+                title: parsed.data.title,
+                description: parsed.data.description,
+                price: parsed.data.price,
+                selling_unit_value: parsed.data.selling_unit_value,
+                selling_unit: normalizeSellingUnit(parsed.data.selling_unit),
+                stock_quantity: parsed.data.stock_quantity,
+                stock_unit: normalizeStockUnit(parsed.data.stock_unit),
+                low_stock_threshold: parsed.data.low_stock_threshold,
+                image_urls: parsed.data.image_urls,
             };
+
+            const legacyPayload = {
+                shop_id: shopId,
+                title: parsed.data.title,
+                description: parsed.data.description,
+                price: parsed.data.price,
+                unit_value: parsed.data.selling_unit_value,
+                unit: normalizeSellingUnit(parsed.data.selling_unit),
+                stock_quantity: parsed.data.stock_quantity,
+                low_stock_threshold: parsed.data.low_stock_threshold,
+                image_urls: parsed.data.image_urls,
+            };
+
             if (editingProduct) {
-                const { error, data } = await supabase.from('products').update(payload).eq('id', editingProduct.id).select().single();
-                if (error) throw error;
-                if (data) setProducts(products.map(p => p.id === data.id ? data : p));
+                let updateResult = await supabase.from('products').update(payload).eq('id', editingProduct.id).select().single();
+
+                if (updateResult.error && isProductsSchemaMismatch(getSupabaseErrorMessage(updateResult.error))) {
+                    updateResult = await supabase.from('products').update(legacyPayload).eq('id', editingProduct.id).select().single();
+                }
+
+                if (updateResult.error) throw updateResult.error;
+                if (updateResult.data) {
+                    const data = updateResult.data;
+                    setProducts(products.map(p => p.id === data.id
+                        ? {
+                            ...data,
+                            selling_unit_value: normalizeUnitValue((data as { selling_unit_value?: number | string | null; unit_value?: number | string | null }).selling_unit_value ?? (data as { unit_value?: number | string | null }).unit_value),
+                            selling_unit: normalizeSellingUnit((data as { selling_unit?: string | null; unit?: string | null }).selling_unit ?? (data as { unit?: string | null }).unit),
+                            stock_quantity: Number((data as { stock_quantity?: number | string | null }).stock_quantity ?? 0),
+                            stock_unit: normalizeStockUnit((data as { stock_unit?: string | null; selling_unit?: string | null; unit?: string | null }).stock_unit ?? (data as { selling_unit?: string | null; unit?: string | null }).selling_unit ?? (data as { unit?: string | null }).unit),
+                        }
+                        : p));
+                }
             } else {
-                const { error, data } = await supabase.from('products').insert([payload]).select().single();
-                if (error) throw error;
-                if (data) setProducts([data, ...products]);
+                let insertResult = await supabase.from('products').insert([payload]).select().single();
+
+                if (insertResult.error && isProductsSchemaMismatch(getSupabaseErrorMessage(insertResult.error))) {
+                    insertResult = await supabase.from('products').insert([legacyPayload]).select().single();
+                }
+
+                if (insertResult.error) throw insertResult.error;
+                if (insertResult.data) {
+                    const data = insertResult.data;
+                    setProducts([{
+                        ...data,
+                        selling_unit_value: normalizeUnitValue((data as { selling_unit_value?: number | string | null; unit_value?: number | string | null }).selling_unit_value ?? (data as { unit_value?: number | string | null }).unit_value),
+                        selling_unit: normalizeSellingUnit((data as { selling_unit?: string | null; unit?: string | null }).selling_unit ?? (data as { unit?: string | null }).unit),
+                        stock_quantity: Number((data as { stock_quantity?: number | string | null }).stock_quantity ?? 0),
+                        stock_unit: normalizeStockUnit((data as { stock_unit?: string | null; selling_unit?: string | null; unit?: string | null }).stock_unit ?? (data as { selling_unit?: string | null; unit?: string | null }).selling_unit ?? (data as { unit?: string | null }).unit),
+                    }, ...products]);
+                }
             }
             closeModal();
         } catch (err: unknown) {
-            const message = err instanceof Error ? err.message : 'Failed to save product.';
+            const message = getSupabaseErrorMessage(err);
+            if (isProductsSchemaMismatch(message)) {
+                setFormError('Database schema is outdated. Please run `database/add_product_unit.sql` in Supabase SQL editor, then try again.');
+                return;
+            }
             setFormError(message);
+            console.error('Product save failed', { message, err });
         } finally {
             setIsSaving(false);
         }
@@ -143,7 +277,6 @@ export default function ProductsDashboard() {
         );
     }
 
-    const inStock = products.filter(p => p.stock_quantity > (p.low_stock_threshold || 5)).length;
     const lowStock = products.filter(p => p.stock_quantity > 0 && p.stock_quantity <= (p.low_stock_threshold || 5)).length;
     const outOfStock = products.filter(p => p.stock_quantity === 0).length;
 
@@ -256,6 +389,7 @@ export default function ProductsDashboard() {
                                                     <div>
                                                         <p className="font-semibold text-gray-900 text-sm leading-none mb-0.5">{product.title}</p>
                                                         <p className="text-xs text-gray-400 line-clamp-1 max-w-[200px]">{product.description || '—'}</p>
+                                                        <p className="text-[11px] text-gray-500 mt-1">Stock: {formatStockWithUnit(product.stock_quantity, product.stock_unit)} available</p>
                                                     </div>
                                                 </div>
                                             </td>
@@ -263,7 +397,7 @@ export default function ProductsDashboard() {
                                             {/* Price */}
                                             <td className="px-5 py-4">
                                                 <span className="text-sm font-bold text-gray-900">
-                                                    Rs. {Number(product.price).toLocaleString()}
+                                                            {formatPriceWithUnit(product.price, product.selling_unit, product.selling_unit_value)}
                                                 </span>
                                             </td>
 
@@ -276,14 +410,14 @@ export default function ProductsDashboard() {
                                                         </span>
                                                     ) : isLow ? (
                                                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-orange-50 text-orange-700">
-                                                            <AlertTriangle className="w-3 h-3" /> Low — {product.stock_quantity} left
+                                                            <AlertTriangle className="w-3 h-3" /> Low — {formatStockWithUnit(product.stock_quantity, product.stock_unit)} left
                                                         </span>
                                                     ) : (
                                                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700">
-                                                            <CheckCircle2 className="w-3 h-3" /> In Stock — {product.stock_quantity}
+                                                            <CheckCircle2 className="w-3 h-3" /> In Stock — {formatStockWithUnit(product.stock_quantity, product.stock_unit)}
                                                         </span>
                                                     )}
-                                                    <p className="text-[10px] text-gray-300 pl-0.5">Alert threshold: {product.low_stock_threshold || 5}</p>
+                                                    <p className="text-[10px] text-gray-300 pl-0.5">Alert threshold: {Number(product.low_stock_threshold || 5).toLocaleString()}{getUnitLabel(product.stock_unit)}</p>
                                                 </div>
                                             </td>
 
@@ -454,7 +588,7 @@ export default function ProductsDashboard() {
                                     placeholder="Describe the product..." />
                             </div>
 
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                                 <div>
                                     <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">Price (LKR) *</label>
                                     <input type="number" step="0.01" required value={formData.price}
@@ -463,24 +597,59 @@ export default function ProductsDashboard() {
                                         placeholder="0.00" />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">Stock Qty</label>
-                                    <input type="number" value={formData.stock_quantity}
-                                        onChange={e => setFormData({ ...formData, stock_quantity: parseInt(e.target.value) || 0 })}
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">Selling Unit Value *</label>
+                                    <input type="number" step="0.001" min="0.001" required value={formData.selling_unit_value}
+                                        onChange={e => setFormData({ ...formData, selling_unit_value: e.target.value })}
+                                        className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
+                                        placeholder="1" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">Selling Unit *</label>
+                                    <select
+                                        value={formData.selling_unit}
+                                        onChange={e => setFormData({ ...formData, selling_unit: normalizeSellingUnit(e.target.value) })}
+                                        className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
+                                    >
+                                        {PRODUCT_UNITS.map((unitOption) => (
+                                            <option key={unitOption} value={unitOption}>{unitOption}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">Stock Quantity *</label>
+                                    <input type="number" step="0.001" min="0" value={formData.stock_quantity}
+                                        onChange={e => setFormData({ ...formData, stock_quantity: e.target.value })}
                                         className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
                                         placeholder="0" />
                                 </div>
                             </div>
 
-                            <div>
-                                <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide flex items-center gap-1.5">
-                                    Low Stock Threshold <AlertTriangle className="w-3.5 h-3.5 text-orange-400" />
-                                </label>
-                                <p className="text-xs text-gray-400 mb-2">You&apos;ll see a warning when stock drops to this level.</p>
-                                <input type="number" value={formData.low_stock_threshold}
-                                    onChange={e => setFormData({ ...formData, low_stock_threshold: parseInt(e.target.value) || 0 })}
-                                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 transition"
-                                    placeholder="5" />
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">Stock Unit *</label>
+                                    <select
+                                        value={formData.stock_unit}
+                                        onChange={e => setFormData({ ...formData, stock_unit: normalizeStockUnit(e.target.value) })}
+                                        className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
+                                    >
+                                        {PRODUCT_UNITS.map((unitOption) => (
+                                            <option key={unitOption} value={unitOption}>{unitOption}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide flex items-center gap-1.5">
+                                        Low Stock Threshold <AlertTriangle className="w-3.5 h-3.5 text-orange-400" />
+                                    </label>
+                                    <input type="number" step="0.001" min="0" value={formData.low_stock_threshold}
+                                        onChange={e => setFormData({ ...formData, low_stock_threshold: e.target.value })}
+                                        className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 transition"
+                                        placeholder="5" />
+                                </div>
                             </div>
+
+                            <p className="text-xs text-gray-400 -mt-2">Examples: Rs. 150 / 1kg with Stock 25kg, or Rs. 80 / 100g with Stock 5000g.</p>
                         </div>
 
                         {/* Modal Footer */}

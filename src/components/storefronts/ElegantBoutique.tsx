@@ -1,11 +1,14 @@
 import React from 'react';
 import { PackageOpen, ShoppingBag, ShieldCheck, Truck } from 'lucide-react';
+import { formatPriceWithUnit, type ProductUnit } from '@/lib/products';
 
 interface Product {
     id: string;
     title: string;
     description: string | null;
     price: number;
+    selling_unit_value: number;
+    selling_unit: ProductUnit;
     stock_quantity: number;
     image_urls: string[] | null;
 }
@@ -28,7 +31,7 @@ interface Props {
     onAddToCart?: (product: Product) => void;
     cartCount?: number;
     onOpenCart?: () => void;
-    sessionUser?: any;
+    sessionUser?: unknown;
 }
 
 export default function ElegantBoutique({ shop, products, onAddToCart, cartCount = 0, onOpenCart, sessionUser }: Props) {
@@ -178,7 +181,7 @@ export default function ElegantBoutique({ shop, products, onAddToCart, cartCount
                                 <div className="text-center">
                                     <p className="font-medium tracking-wide text-stone-900 text-sm mb-1 font-sans">{product.title}</p>
                                     {product.description && <p className="text-xs text-stone-400 mb-4 line-clamp-2 font-sans font-light leading-relaxed">{product.description}</p>}
-                                    <p style={{ color: primaryColor }} className="text-sm font-medium mb-4 tracking-wide font-sans">Rs. {product.price.toLocaleString()}</p>
+                                    <p style={{ color: primaryColor }} className="text-sm font-medium mb-4 tracking-wide font-sans">{formatPriceWithUnit(product.price, product.selling_unit, product.selling_unit_value)}</p>
                                     {product.stock_quantity > 0 ? (
                                         <button
                                             onClick={() => onAddToCart?.(product)}
@@ -239,7 +242,7 @@ export default function ElegantBoutique({ shop, products, onAddToCart, cartCount
                                 </div>
                                 <p className="font-medium tracking-wide text-stone-900 text-sm mb-1 font-sans truncate">{product.title}</p>
                                 <div className="flex items-center justify-between">
-                                    <p style={{ color: primaryColor }} className="text-sm font-medium font-sans">Rs. {product.price.toLocaleString()}</p>
+                                    <p style={{ color: primaryColor }} className="text-sm font-medium font-sans">{formatPriceWithUnit(product.price, product.selling_unit, product.selling_unit_value)}</p>
                                     {product.stock_quantity > 0 && (
                                         <button
                                             onClick={() => onAddToCart?.(product)}

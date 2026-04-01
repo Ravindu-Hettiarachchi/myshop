@@ -1,9 +1,50 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/utils/supabase/client';
 import { Package, Truck, CheckCircle, Store, Receipt, Clock, Box, MapPin, Mail, Phone, AlertCircle, RefreshCw, ExternalLink } from 'lucide-react';
+import { formatPriceWithUnit, formatQuantityLabel } from '@/lib/products';
+
+interface ShopData {
+    id: string;
+    shop_name: string;
+    logo_url?: string | null;
+    primary_color?: string | null;
+}
+
+interface OrderItem {
+    quantity: number;
+    unit_price: number;
+    ordered_quantity?: number | null;
+    ordered_unit?: string | null;
+    selling_unit?: string | null;
+    selling_unit_value?: number | null;
+    products?: {
+        title?: string | null;
+        image_urls?: string[] | null;
+    } | null;
+}
+
+interface OrderData {
+    id: string;
+    status: string;
+    created_at: string;
+    total_amount: number;
+    packed_at?: string;
+    shipped_at?: string;
+    delivered_at?: string;
+    tracking_number?: string | null;
+    tracking_carrier?: string | null;
+    tracking_url?: string | null;
+    customer_name?: string | null;
+    customer_email?: string | null;
+    customer_phone?: string | null;
+    customer_address?: string | null;
+    customer_city?: string | null;
+    customer_postal?: string | null;
+    order_items?: OrderItem[];
+}
 
 const STEPS = [
     { id: 'processing', label: 'Processing', sub: 'Order received, being prepared', Icon: Clock },
@@ -22,8 +63,8 @@ const STATUS_COLOR: Record<string, { ring: string; bg: string; text: string }> =
 
 export default function OrderTrackerPage({ params }: { params: Promise<{ slug: string; id: string }> }) {
     const supabase = createClient();
-    const [order, setOrder] = useState<any>(null);
-    const [shop, setShop] = useState<any>(null);
+    const [order, setOrder] = useState<OrderData | null>(null);
+    const [shop, setShop] = useState<ShopData | null>(null);
     const [loading, setLoading] = useState(true);
     const [slug, setSlug] = useState('');
     const [orderId, setOrderId] = useState('');
@@ -31,43 +72,43 @@ export default function OrderTrackerPage({ params }: { params: Promise<{ slug: s
     const [refreshing, setRefreshing] = useState(false);
     const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+    const load = useCallback(async (s: string, id: string, isRefresh = false) => {
+        if (isRefresh) setRefreshing(true);
+        const { data: shopData } = await supabase
+            .from('shops')
+            .select('*, primary_color')
+            .eq('route_path', s)
+            .single<ShopData>();
+        if (!shopData) { setLoading(false); return; }
+        setShop(shopData);
+
+        const { data: orderData } = await supabase
+            .from('orders')
+            .select(`*, order_items(quantity, unit_price, ordered_quantity, ordered_unit, selling_unit_value, selling_unit, products(title, image_urls))`)
+            .eq('id', id)
+            .eq('shop_id', shopData.id)
+            .single<OrderData>();
+
+        setOrder(orderData);
+        setLastRefreshed(new Date());
+        setLoading(false);
+        if (isRefresh) setRefreshing(false);
+    }, [supabase]);
+
     useEffect(() => {
         params.then(({ slug, id }) => {
             setSlug(slug);
             setOrderId(id);
             load(slug, id);
         });
-    }, []);
-
-    const load = async (s: string, id: string, isRefresh = false) => {
-        if (isRefresh) setRefreshing(true);
-        const { data: shopData } = await supabase
-            .from('shops')
-            .select('*, primary_color')
-            .eq('route_path', s)
-            .single();
-        if (!shopData) { setLoading(false); return; }
-        setShop(shopData);
-
-        const { data: orderData } = await supabase
-            .from('orders')
-            .select(`*, order_items(quantity, unit_price, products(title, image_urls))`)
-            .eq('id', id)
-            .eq('shop_id', shopData.id)
-            .single();
-
-        setOrder(orderData);
-        setLastRefreshed(new Date());
-        setLoading(false);
-        if (isRefresh) setRefreshing(false);
-    };
+    }, [params, load]);
 
     // Auto-poll every 30 seconds
     useEffect(() => {
         if (!slug || !orderId) return;
         pollRef.current = setInterval(() => load(slug, orderId, true), 30000);
         return () => { if (pollRef.current) clearInterval(pollRef.current); };
-    }, [slug, orderId]);
+    }, [slug, orderId, load]);
 
     if (loading) {
         return (
@@ -91,7 +132,7 @@ export default function OrderTrackerPage({ params }: { params: Promise<{ slug: s
             <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-8 text-center">
                 <AlertCircle className="w-16 h-16 text-gray-300 mb-4" />
                 <h1 className="text-2xl font-bold text-gray-900 mb-2">Order Not Found</h1>
-                <p className="text-gray-500 max-w-sm mb-6">We couldn't find tracking info for this order.</p>
+                <p className="text-gray-500 max-w-sm mb-6">We couldn&apos;t find tracking info for this order.</p>
                 <Link href={`/shop/${slug}`} className="text-blue-600 font-medium hover:underline">Return to {shop.shop_name}</Link>
             </div>
         );
@@ -103,7 +144,6 @@ export default function OrderTrackerPage({ params }: { params: Promise<{ slug: s
     const colors = STATUS_COLOR[order.status] || STATUS_COLOR.processing;
 
     const items = order.order_items || [];
-    const subtotal = items.reduce((s: number, i: any) => s + Number(i.unit_price * i.quantity), 0);
 
     const statusTimestamps: Record<string, string | undefined> = {
         processing: order.created_at,
@@ -293,13 +333,13 @@ export default function OrderTrackerPage({ params }: { params: Promise<{ slug: s
                         <h2 className="font-bold text-gray-900">Order Summary</h2>
                     </div>
                     <div className="divide-y divide-gray-50">
-                        {items.map((item: any, i: number) => (
+                        {items.map((item: OrderItem, i: number) => (
                             <div key={i} className="px-6 py-4 flex items-center gap-4">
                                 <div className="w-12 h-12 bg-gray-100 rounded-xl overflow-hidden flex-shrink-0">
                                     {item.products?.image_urls?.[0] ? (
                                         <img
                                             src={item.products.image_urls[0]}
-                                            alt={item.products?.title}
+                                            alt={item.products?.title || 'Product'}
                                             className="w-full h-full object-cover"
                                             onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                                         />
@@ -311,7 +351,12 @@ export default function OrderTrackerPage({ params }: { params: Promise<{ slug: s
                                 </div>
                                 <div className="flex-1">
                                     <p className="font-semibold text-gray-900 text-sm">{item.products?.title || 'Product'}</p>
-                                    <p className="text-xs text-gray-400">Qty: {item.quantity} × Rs. {Number(item.unit_price).toLocaleString()}</p>
+                                    <p className="text-xs text-gray-400">
+                                        Qty: x{item.quantity} ({formatQuantityLabel(item.ordered_quantity ?? item.quantity, item.ordered_unit ?? item.selling_unit ?? 'item')})
+                                    </p>
+                                    <p className="text-xs text-gray-400">
+                                        {formatPriceWithUnit(Number(item.unit_price), item.selling_unit ?? item.ordered_unit ?? 'item', item.selling_unit_value ?? 1)}
+                                    </p>
                                 </div>
                                 <p className="font-bold text-gray-900 font-mono text-sm">
                                     Rs. {Number(item.unit_price * item.quantity).toLocaleString()}

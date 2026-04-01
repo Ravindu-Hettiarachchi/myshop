@@ -1,11 +1,14 @@
 import React from 'react';
 import { PackageOpen, ShoppingBag, ShieldCheck, Truck, RefreshCw, Star } from 'lucide-react';
+import { formatPriceWithUnit, type ProductUnit } from '@/lib/products';
 
 interface Product {
     id: string;
     title: string;
     description: string | null;
     price: number;
+    selling_unit_value: number;
+    selling_unit: ProductUnit;
     stock_quantity: number;
     image_urls: string[] | null;
 }
@@ -28,7 +31,7 @@ interface Props {
     onAddToCart?: (product: Product) => void;
     cartCount?: number;
     onOpenCart?: () => void;
-    sessionUser?: any;
+    sessionUser?: unknown;
 }
 
 export default function MinimalWhite({ shop, products, onAddToCart, cartCount = 0, onOpenCart, sessionUser }: Props) {
@@ -191,7 +194,7 @@ export default function MinimalWhite({ shop, products, onAddToCart, cartCount = 
                                     <p className="font-semibold text-gray-900 text-sm truncate mb-0.5">{product.title}</p>
                                     {product.description && <p className="text-xs text-gray-400 line-clamp-1 mb-3">{product.description}</p>}
                                     <div className="flex items-center justify-between">
-                                        <span style={{ color: primaryColor }} className="text-base font-extrabold">Rs.&nbsp;{product.price.toLocaleString()}</span>
+                                        <span style={{ color: primaryColor }} className="text-base font-extrabold">{formatPriceWithUnit(product.price, product.selling_unit, product.selling_unit_value)}</span>
                                         <button
                                             onClick={() => onAddToCart?.(product)}
                                             disabled={product.stock_quantity === 0}
@@ -254,7 +257,7 @@ export default function MinimalWhite({ shop, products, onAddToCart, cartCount = 
                                 <div className="p-3">
                                     <p className="font-semibold text-gray-900 text-sm truncate mb-2">{product.title}</p>
                                     <div className="flex items-center justify-between">
-                                        <span style={{ color: primaryColor }} className="text-sm font-extrabold">Rs.&nbsp;{product.price.toLocaleString()}</span>
+                                        <span style={{ color: primaryColor }} className="text-sm font-extrabold">{formatPriceWithUnit(product.price, product.selling_unit, product.selling_unit_value)}</span>
                                         <button
                                             onClick={() => onAddToCart?.(product)}
                                             disabled={product.stock_quantity === 0}

@@ -31,11 +31,11 @@ export interface StorefrontProps {
         footer_text: string | null;
         tax_rate?: number;
     };
-    products: any[];
-    onAddToCart: (product: any) => void;
+    products: unknown[];
+    onAddToCart: (product: unknown) => void;
     onOpenCart: () => void;
     cartCount: number;
-    sessionUser: any;
+    sessionUser: unknown;
 }
 
 // Theme metadata used in the registry (code-side only, not from DB)

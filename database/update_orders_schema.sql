@@ -48,3 +48,17 @@ USING (
 
 -- 5. Force update the DB cache/realtime
 ALTER PUBLICATION supabase_realtime ADD TABLE order_items;
+
+-- 6. Add unit-aware quantity metadata for grocery-style mixed products
+ALTER TABLE public.order_items
+    ADD COLUMN IF NOT EXISTS ordered_quantity DECIMAL(12,3),
+    ADD COLUMN IF NOT EXISTS ordered_unit TEXT CHECK (ordered_unit IN ('item', 'kg', 'g', 'litre', 'ml', 'pack')),
+    ADD COLUMN IF NOT EXISTS selling_unit_value DECIMAL(10,3),
+    ADD COLUMN IF NOT EXISTS selling_unit TEXT CHECK (selling_unit IN ('item', 'kg', 'g', 'litre', 'ml', 'pack'));
+
+UPDATE public.order_items
+SET
+    ordered_quantity = COALESCE(ordered_quantity, quantity::DECIMAL),
+    ordered_unit = COALESCE(ordered_unit, 'item'),
+    selling_unit_value = COALESCE(selling_unit_value, 1),
+    selling_unit = COALESCE(selling_unit, 'item');

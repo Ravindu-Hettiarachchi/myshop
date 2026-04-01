@@ -7,6 +7,7 @@ import {
     Box, MapPin, Mail, Phone, Receipt, SendHorizonal, Loader2, Pencil, Check, ChevronRight
 } from 'lucide-react';
 import Link from 'next/link';
+import { formatQuantityLabel } from '@/lib/products';
 
 const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; icon: React.ElementType }> = {
     processing: { label: 'Processing', bg: 'bg-amber-50',   text: 'text-amber-700',   icon: Clock },
@@ -25,9 +26,39 @@ interface TrackingEditState {
     url: string;
 }
 
+interface DashboardOrderItem {
+    quantity: number;
+    unit_price: number;
+    ordered_quantity?: number | null;
+    ordered_unit?: string | null;
+    selling_unit?: string | null;
+    products?: {
+        title?: string | null;
+        image_urls?: string[] | null;
+    } | null;
+}
+
+interface DashboardOrder {
+    id: string;
+    created_at: string;
+    customer_name?: string | null;
+    customer_email?: string | null;
+    customer_phone?: string | null;
+    customer_address?: string | null;
+    customer_city?: string | null;
+    customer_postal?: string | null;
+    total_amount?: number | null;
+    status: string;
+    tracking_number?: string | null;
+    tracking_carrier?: string | null;
+    tracking_url?: string | null;
+    email_sent_at?: string | null;
+    order_items?: DashboardOrderItem[];
+}
+
 export default function OrdersDashboard() {
     const supabase = createClient();
-    const [orders, setOrders] = useState<any[]>([]);
+    const [orders, setOrders] = useState<DashboardOrder[]>([]);
     const [shopRoute, setShopRoute] = useState('');
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -47,7 +78,7 @@ export default function OrdersDashboard() {
                 setShopRoute(shop.route_path);
                 const { data: ords } = await supabase
                     .from('orders')
-                    .select('*, order_items(quantity, unit_price, products(title, image_urls))')
+                    .select('*, order_items(quantity, unit_price, ordered_quantity, ordered_unit, selling_unit, products(title, image_urls))')
                     .eq('shop_id', shop.id)
                     .order('created_at', { ascending: false });
                 setOrders(ords || []);
@@ -62,13 +93,13 @@ export default function OrdersDashboard() {
         const tsField: Record<string, string> = {
             packed: 'packed_at', shipped: 'shipped_at', delivered: 'delivered_at'
         };
-        const update: Record<string, any> = { status: newStatus };
+    const update: Record<string, string> = { status: newStatus };
         if (tsField[newStatus]) update[tsField[newStatus]] = now;
         setOrders(orders.map(o => o.id === orderId ? { ...o, ...update } : o));
         await supabase.from('orders').update(update).eq('id', orderId);
     };
 
-    const openTrackingEdit = (order: any) => {
+    const openTrackingEdit = (order: DashboardOrder) => {
         setTrackingEdit({
             orderId: order.id,
             number: order.tracking_number || '',
@@ -91,7 +122,7 @@ export default function OrdersDashboard() {
         setSavingTracking(false);
     };
 
-    const handleSendEmail = async (order: any) => {
+    const handleSendEmail = async (order: DashboardOrder) => {
         setSendingEmail(order.id);
         try {
             const res = await fetch('/api/orders/send-tracking-email', {
@@ -291,9 +322,10 @@ export default function OrdersDashboard() {
                                             <div className="bg-white rounded-xl border border-gray-100 p-4">
                                                 <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Items</p>
                                                 <div className="space-y-1">
-                                                    {order.order_items?.map((item: any, idx: number) => (
+                                                    {order.order_items?.map((item: DashboardOrderItem, idx: number) => (
                                                         <p key={idx} className="text-sm text-gray-600 truncate">
-                                                            <span className="font-bold text-gray-800">{item.quantity}×</span> {item.products?.title || '—'}
+                                                            <span className="font-bold text-gray-800">x{item.quantity}</span> {item.products?.title || '—'}
+                                                            <span className="text-gray-400"> · {formatQuantityLabel(item.ordered_quantity ?? item.quantity, item.ordered_unit ?? item.selling_unit ?? 'item')}</span>
                                                         </p>
                                                     ))}
                                                 </div>

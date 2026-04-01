@@ -58,18 +58,29 @@ export default function SignupPage() {
         if (Object.keys(errs).length > 0) return;
 
         setIsLoading(true);
-        const { error, data } = await supabase.auth.signUp({ email, password, options: { data: { full_name: name } } });
+        try {
+            const { error, data } = await supabase.auth.signUp({ email, password, options: { data: { full_name: name } } });
 
-        if (error) { setServerError(error.message); setIsLoading(false); return; }
-        if (data.user?.identities?.length === 0) { setServerError('This email is already registered.'); setIsLoading(false); return; }
-        if (data.user) {
-            await supabase.from('owners').insert([{ id: data.user.id, email: data.user.email, full_name: name, role: 'shop_owner' }]);
-            router.push('/setup');
+            if (error) { setServerError(error.message); return; }
+            if (data.user?.identities?.length === 0) { setServerError('This email is already registered.'); return; }
+            if (data.user) {
+                await supabase.from('owners').insert([{ id: data.user.id, email: data.user.email, full_name: name, role: 'shop_owner' }]);
+                router.push('/setup');
+            }
+        } catch {
+            setServerError('Network error while contacting Supabase. Check your internet, VPN/firewall, and browser privacy extensions, then try again.');
+        } finally {
+            setIsLoading(false);
         }
     };
 
     const handleGoogleSignup = async () => {
-        await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: `${window.location.origin}/auth/callback?next=/setup` } });
+        setServerError(null);
+        try {
+            await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: `${window.location.origin}/auth/callback?next=/setup` } });
+        } catch {
+            setServerError('Google sign-in could not be started. Please check your network and try again.');
+        }
     };
 
     const inputCls = (field: Fields) =>

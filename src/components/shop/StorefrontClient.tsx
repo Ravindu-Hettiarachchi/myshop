@@ -6,19 +6,39 @@ import { ShoppingCart, X, Loader2 } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 import { getThemeComponent, isThemeDark } from '@/lib/themes';
 import DynamicTheme, { type DynamicThemeConfig } from '@/components/storefronts/DynamicTheme';
+import { formatPriceWithUnit, formatQuantityLabel, normalizeSellingUnit, normalizeStockUnit, normalizeUnitValue, type ProductUnit } from '@/lib/products';
 
 interface Product {
     id: string;
     title: string;
     price: number;
+    selling_unit_value: number;
+    selling_unit: ProductUnit;
     stock_quantity: number;
-    image: string;
+    stock_unit: ProductUnit;
+    image?: string;
     description: string;
+    image_urls?: string[];
 }
 
 interface CartItem extends Product {
-    cartQuantity: number;
-    image_urls?: string[]; // to match the backend layout if needed
+    quantityMultiplier: number;
+    orderedQuantity: number;
+    orderedUnit: ProductUnit;
+}
+
+interface StorefrontProduct {
+    id: string;
+    title: string;
+    description: string | null;
+    price: number;
+    selling_unit_value: number | string | null;
+    selling_unit: string | null;
+    stock_quantity: number;
+    stock_unit: string | null;
+    unit_value?: number | string | null;
+    unit?: string | null;
+    image_urls?: string[] | null;
 }
 
 interface ShopConfig {
@@ -49,8 +69,8 @@ interface ThemeConfigRow {
 interface Props {
     routePath: string;
     shopConfig: ShopConfig;
-    productList: any[];
-    sessionUserInit: any;
+    productList: StorefrontProduct[];
+    sessionUserInit: unknown;
     themeConfig?: ThemeConfigRow | null;
 }
 
@@ -61,54 +81,112 @@ export default function StorefrontClient({ routePath, shopConfig, productList, s
     const [cart, setCart] = useState<CartItem[]>([]);
     const [isCartOpen, setIsCartOpen] = useState(false);
     const [isCheckingOut, setIsCheckingOut] = useState(false);
-    const [customerEmail, setCustomerEmail] = useState('');
-    const [sessionUser, setSessionUser] = useState<any>(sessionUserInit);
+    const [sessionUser, setSessionUser] = useState(sessionUserInit);
+    const [productPicker, setProductPicker] = useState<{ product: Product; quantityMultiplier: number } | null>(null);
 
     // Initial mapping of products from backend format to Cart format
     const products: Product[] = productList.map(p => ({
         id: p.id,
         title: p.title,
         price: Number(p.price),
+        selling_unit_value: normalizeUnitValue(p.selling_unit_value ?? p.unit_value),
+        selling_unit: normalizeSellingUnit(p.selling_unit ?? p.unit),
         stock_quantity: p.stock_quantity,
+        stock_unit: normalizeStockUnit(p.stock_unit ?? p.selling_unit ?? p.unit),
         description: p.description || '',
+        image_urls: p.image_urls || undefined,
         image: p.image_urls?.[0] || 'https://images.unsplash.com/photo-1608688461751-692348db49b5?w=400&q=80',
-        ...p
     }));
+
+    const isCartProduct = (value: unknown): value is Product => {
+        if (!value || typeof value !== 'object') return false;
+        const candidate = value as Partial<Product>;
+        return (
+            typeof candidate.id === 'string' &&
+            typeof candidate.title === 'string' &&
+            typeof candidate.price === 'number' &&
+            typeof candidate.selling_unit_value === 'number' &&
+            typeof candidate.stock_quantity === 'number'
+        );
+    };
 
     useEffect(() => {
         const fetchStoreData = async () => {
             const { data: { session } } = await supabase.auth.getSession();
             if (session?.user) {
                 setSessionUser(session.user);
-                setCustomerEmail(session.user.email || '');
             }
         };
         fetchStoreData();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const addToCart = (product: any) => {
+    const openProductPicker = (productInput: unknown) => {
+        if (!isCartProduct(productInput)) return;
+        const product = productInput;
+        setProductPicker({ product, quantityMultiplier: 1 });
+    };
+
+    const getMaxMultiplier = (product: Product) => {
+        const perPack = normalizeUnitValue(product.selling_unit_value);
+        if (perPack <= 0) return 0;
+        return Math.max(0, Math.floor(product.stock_quantity / perPack));
+    };
+
+    const addSelectedToCart = () => {
+        if (!productPicker) return;
+        const { product, quantityMultiplier } = productPicker;
+        const maxMultiplier = getMaxMultiplier(product);
+
+        if (maxMultiplier <= 0) return;
+        const safeMultiplier = Math.min(maxMultiplier, Math.max(1, quantityMultiplier));
+        const requestedQuantity = normalizeUnitValue(product.selling_unit_value) * safeMultiplier;
+
         setCart(prev => {
             const existing = prev.find(item => item.id === product.id);
             if (existing) {
-                if (existing.cartQuantity >= product.stock_quantity) return prev; // Cannot exceed stock
-                return prev.map(item => item.id === product.id ? { ...item, cartQuantity: item.cartQuantity + 1 } : item);
+                const newMultiplier = existing.quantityMultiplier + safeMultiplier;
+                const cappedMultiplier = Math.min(newMultiplier, maxMultiplier);
+                return prev.map(item => item.id === product.id
+                    ? {
+                        ...item,
+                        quantityMultiplier: cappedMultiplier,
+                        orderedQuantity: normalizeUnitValue(item.selling_unit_value) * cappedMultiplier,
+                    }
+                    : item);
             }
             return [...prev, {
                 ...product,
                 image: product.image_urls?.[0] || 'https://images.unsplash.com/photo-1608688461751-692348db49b5?w=400&q=80',
-                cartQuantity: 1
+                quantityMultiplier: safeMultiplier,
+                orderedQuantity: requestedQuantity,
+                orderedUnit: product.selling_unit,
             }];
         });
+        setProductPicker(null);
         setIsCartOpen(true);
+    };
+
+    const updateItemMultiplier = (productId: string, nextMultiplier: number) => {
+        setCart(prev => prev.flatMap(item => {
+            if (item.id !== productId) return [item];
+            const maxMultiplier = getMaxMultiplier(item);
+            const safeMultiplier = Math.min(maxMultiplier, Math.max(0, nextMultiplier));
+            if (safeMultiplier === 0) return [];
+            return [{
+                ...item,
+                quantityMultiplier: safeMultiplier,
+                orderedQuantity: normalizeUnitValue(item.selling_unit_value) * safeMultiplier,
+            }];
+        }));
     };
 
     const removeFromCart = (productId: string) => {
         setCart(prev => prev.filter(item => item.id !== productId));
     };
 
-    const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.cartQuantity), 0);
-    const cartCount = cart.reduce((sum, item) => sum + item.cartQuantity, 0);
+    const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantityMultiplier), 0);
+    const cartCount = cart.reduce((sum, item) => sum + item.quantityMultiplier, 0);
 
     const handleCheckout = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -154,8 +232,8 @@ export default function StorefrontClient({ routePath, shopConfig, productList, s
             return (
                 <DynamicTheme
                     shop={enrichedConfig}
-                    products={productList as any}
-                    onAddToCart={addToCart}
+                    products={products}
+                    onAddToCart={openProductPicker}
                     onOpenCart={() => setIsCartOpen(true)}
                     cartCount={cartCount}
                     sessionUser={sessionUser}
@@ -169,8 +247,8 @@ export default function StorefrontClient({ routePath, shopConfig, productList, s
         return (
             <ThemeComponent
                 shop={enrichedConfig}
-                products={productList as any}
-                onAddToCart={addToCart}
+                products={products}
+                onAddToCart={openProductPicker}
                 onOpenCart={() => setIsCartOpen(true)}
                 cartCount={cartCount}
                 sessionUser={sessionUser}
@@ -221,7 +299,7 @@ export default function StorefrontClient({ routePath, shopConfig, productList, s
                                     cart.map(item => (
                                         <div key={item.id} className="flex gap-4">
                                             <div className="w-20 h-20 rounded-xl overflow-hidden bg-gray-100 flex-shrink-0">
-                                                <img src={item.image} alt={item.title} className="w-full h-full object-cover" />
+                                                <img src={item.image || 'https://images.unsplash.com/photo-1608688461751-692348db49b5?w=400&q=80'} alt={item.title} className="w-full h-full object-cover" />
                                             </div>
                                             <div className="flex-1">
                                                 <div className="flex justify-between">
@@ -230,8 +308,24 @@ export default function StorefrontClient({ routePath, shopConfig, productList, s
                                                         <X className="w-4 h-4" />
                                                     </button>
                                                 </div>
-                                                <p className={`${theme.textMuted} text-sm mt-1`}>Qty: {item.cartQuantity}</p>
-                                                <p className={`font-bold ${theme.text} mt-2`}>රු {(item.price * item.cartQuantity).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                                                <p className={`${theme.textMuted} text-sm mt-1`}>{formatQuantityLabel(item.orderedQuantity, item.orderedUnit)}</p>
+                                                <p className={`font-bold ${theme.text} mt-2`}>රු {(item.price * item.quantityMultiplier).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                                                <p className={`${theme.textMuted} text-xs mt-0.5`}>{formatPriceWithUnit(item.price, item.selling_unit, item.selling_unit_value)} · Qty x{item.quantityMultiplier}</p>
+                                                <div className="mt-2 flex items-center gap-2">
+                                                    <button
+                                                        onClick={() => updateItemMultiplier(item.id, item.quantityMultiplier - 1)}
+                                                        className="w-6 h-6 rounded-md border border-gray-300 text-gray-600 hover:bg-gray-100"
+                                                    >
+                                                        -
+                                                    </button>
+                                                    <span className={`text-xs font-semibold ${theme.textMuted}`}>{item.quantityMultiplier}</span>
+                                                    <button
+                                                        onClick={() => updateItemMultiplier(item.id, item.quantityMultiplier + 1)}
+                                                        className="w-6 h-6 rounded-md border border-gray-300 text-gray-600 hover:bg-gray-100"
+                                                    >
+                                                        +
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
                                     ))
@@ -255,7 +349,7 @@ export default function StorefrontClient({ routePath, shopConfig, productList, s
                                             >
                                                 {isCheckingOut ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Proceed to Checkout'}
                                             </button>
-                                            <p className={`text-xs text-center ${theme.textMuted}`}>By checking out, you agree to {shopName}'s Terms of Service.</p>
+                                            <p className={`text-xs text-center ${theme.textMuted}`}>By checking out, you agree to {shopName}&apos;s Terms of Service.</p>
                                         </form>
                                     ) : (
                                         <div className="space-y-4">
@@ -275,6 +369,72 @@ export default function StorefrontClient({ routePath, shopConfig, productList, s
                             )}
 
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {productPicker && (
+                <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className={`w-full max-w-md rounded-2xl p-5 shadow-2xl border ${theme.cartPanel}`}>
+                        <div className="flex justify-between items-start gap-3 mb-4">
+                            <div>
+                                <h3 className={`text-lg font-bold ${theme.text}`}>{productPicker.product.title}</h3>
+                                <p className={`text-xs ${theme.textMuted}`}>{formatPriceWithUnit(productPicker.product.price, productPicker.product.selling_unit, productPicker.product.selling_unit_value)}</p>
+                            </div>
+                            <button onClick={() => setProductPicker(null)} className="p-1 text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+                        </div>
+
+                        <div className="mb-4">
+                            <p className={`text-sm ${theme.textMuted} mb-2`}>Choose quantity</p>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setProductPicker(prev => prev ? { ...prev, quantityMultiplier: Math.max(1, prev.quantityMultiplier - 1) } : prev)}
+                                    className="w-9 h-9 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100"
+                                >
+                                    -
+                                </button>
+                                <input
+                                    type="number"
+                                    min={1}
+                                    value={productPicker.quantityMultiplier}
+                                    onChange={(e) => {
+                                        const value = Number(e.target.value);
+                                        setProductPicker(prev => prev ? { ...prev, quantityMultiplier: Number.isFinite(value) ? Math.max(1, Math.floor(value)) : 1 } : prev);
+                                    }}
+                                    className="w-20 text-center px-2 py-2 rounded-lg border border-gray-300 text-sm"
+                                />
+                                <button
+                                    onClick={() => setProductPicker(prev => prev ? { ...prev, quantityMultiplier: prev.quantityMultiplier + 1 } : prev)}
+                                    className="w-9 h-9 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100"
+                                >
+                                    +
+                                </button>
+                            </div>
+                        </div>
+
+                        {(() => {
+                            const selectedQty = normalizeUnitValue(productPicker.product.selling_unit_value) * productPicker.quantityMultiplier;
+                            const selectedSubtotal = productPicker.product.price * productPicker.quantityMultiplier;
+                            const maxMultiplier = getMaxMultiplier(productPicker.product);
+                            const exceeds = productPicker.quantityMultiplier > maxMultiplier;
+                            return (
+                                <>
+                                    <p className={`text-sm ${theme.textMuted} mb-1`}>You are adding: <span className={`font-semibold ${theme.text}`}>{formatQuantityLabel(selectedQty, productPicker.product.selling_unit)}</span></p>
+                                    <p className={`text-sm ${theme.textMuted} mb-3`}>Subtotal: <span className={`font-semibold ${theme.text}`}>Rs. {selectedSubtotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></p>
+                                    {exceeds && (
+                                        <p className="text-xs text-red-500 mb-3">Only {formatQuantityLabel(productPicker.product.stock_quantity, productPicker.product.stock_unit)} left in stock.</p>
+                                    )}
+                                </>
+                            );
+                        })()}
+
+                        <button
+                            onClick={addSelectedToCart}
+                            disabled={productPicker.quantityMultiplier > getMaxMultiplier(productPicker.product)}
+                            className={`w-full py-2.5 rounded-lg font-semibold ${theme.buttonBg} disabled:opacity-50`}
+                        >
+                            Add to Cart
+                        </button>
                     </div>
                 </div>
             )}

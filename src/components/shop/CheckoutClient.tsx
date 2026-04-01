@@ -5,17 +5,26 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { Loader2, ArrowLeft, CreditCard, Wallet, MapPin, Truck, AlertCircle } from 'lucide-react';
 import type { User } from '@supabase/supabase-js';
+import { formatPriceWithUnit, formatQuantityLabel, type ProductUnit } from '@/lib/products';
 
-interface CartItem { id: string; title: string; price: number; cartQuantity: number; image: string; }
+interface CartItem {
+    id: string;
+    title: string;
+    price: number;
+    image?: string;
+    quantityMultiplier: number;
+    orderedQuantity: number;
+    orderedUnit: ProductUnit;
+    selling_unit_value: number;
+    selling_unit: ProductUnit;
+    stock_quantity: number;
+    stock_unit: ProductUnit;
+}
 interface ShopData {
     id: string;
     route_path: string;
     tax_rate: number | string | null;
     template: string | null;
-}
-
-interface OrderInsertResult {
-    id: string;
 }
 
 function FieldError({ msg }: { msg?: string }) {
@@ -60,7 +69,7 @@ export default function CheckoutClient({ shop }: { shop: ShopData }) {
         fetchSession();
     }, [shop.id, shop.route_path, router, supabase.auth]);
 
-    const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.cartQuantity), 0);
+    const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantityMultiplier), 0);
     const rawTaxRate = typeof shop.tax_rate === 'number' ? shop.tax_rate : parseFloat(shop.tax_rate ?? '0');
     const normalizedTaxRate = Number.isFinite(rawTaxRate) ? rawTaxRate : 0;
     const taxCalc = cartTotal * (normalizedTaxRate / 100);
@@ -101,32 +110,33 @@ export default function CheckoutClient({ shop }: { shop: ShopData }) {
 
         setIsCheckingOut(true);
         try {
-            const { data: orderData, error: orderError } = await supabase
-                .from('orders')
-                .insert([{
-                    shop_id: shop.id,
-                    customer_email: customerEmail,
-                    customer_name: fullName.trim(),
-                    customer_address: address.trim(),
-                    customer_city: city.trim(),
-                    customer_postal: postalCode.trim(),
-                    payment_method: paymentMethod,
-                    total_amount: grandTotal,
-                    status: 'processing',
-                }])
-                .select('id').single<OrderInsertResult>();
-            if (orderError) throw orderError;
+            const response = await fetch('/api/orders/place', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    shopId: shop.id,
+                    routePath: shop.route_path,
+                    paymentMethod,
+                    customer: {
+                        email: customerEmail,
+                        fullName: fullName.trim(),
+                        address: address.trim(),
+                        city: city.trim(),
+                        postalCode: postalCode.trim(),
+                    },
+                    items: cart,
+                }),
+            });
 
-            const orderItems = cart.map((item: CartItem) => ({
-                order_id: orderData.id, product_id: item.id, quantity: item.cartQuantity, unit_price: item.price
-            }));
-            const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
-            if (itemsError) throw itemsError;
+            const json = await response.json() as { error?: string; orderId?: string };
+            if (!response.ok || !json.orderId) {
+                throw new Error(json.error || 'Failed to place order.');
+            }
 
             localStorage.removeItem(`myshop_cart_${shop.id}`);
             setOrderSuccess('Payment successful. Your order has been placed successfully. Redirecting...');
             setTimeout(() => {
-                router.push(`/shop/${shop.route_path}/checkout/success?orderId=${orderData.id}`);
+                router.push(`/shop/${shop.route_path}/checkout/success?orderId=${json.orderId}`);
             }, 900);
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : 'Please try again.';
@@ -260,12 +270,13 @@ export default function CheckoutClient({ shop }: { shop: ShopData }) {
                                 {cart.map(item => (
                                     <div key={item.id} className="flex gap-4 items-center">
                                         <div className="w-20 h-20 rounded-2xl overflow-hidden bg-gray-100 flex-shrink-0 border border-gray-200/50">
-                                            <img src={item.image} alt={item.title} className="w-full h-full object-cover" />
+                                            <img src={item.image || 'https://images.unsplash.com/photo-1608688461751-692348db49b5?w=400&q=80'} alt={item.title} className="w-full h-full object-cover" />
                                         </div>
                                         <div className="flex-1">
                                             <h4 className="font-bold text-sm line-clamp-2 leading-snug">{item.title}</h4>
-                                            <p className={`text-xs mt-1 ${tStyles.muted}`}>Qty: {item.cartQuantity}</p>
-                                            <p className="font-bold text-sm mt-2">Rs. {(item.price * item.cartQuantity).toLocaleString()}</p>
+                                            <p className={`text-xs mt-1 ${tStyles.muted}`}>{formatPriceWithUnit(item.price, item.selling_unit, item.selling_unit_value)}</p>
+                                            <p className={`text-xs mt-1 ${tStyles.muted}`}>Qty: x{item.quantityMultiplier} ({formatQuantityLabel(item.orderedQuantity, item.orderedUnit)})</p>
+                                            <p className="font-bold text-sm mt-2">Rs. {(item.price * item.quantityMultiplier).toLocaleString()}</p>
                                         </div>
                                     </div>
                                 ))}
