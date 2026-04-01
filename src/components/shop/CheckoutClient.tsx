@@ -61,13 +61,44 @@ export default function CheckoutClient({ shop }: { shop: ShopData }) {
     useEffect(() => {
         const savedCart = localStorage.getItem(`myshop_cart_${shop.id}`);
         if (savedCart) { try { setCart(JSON.parse(savedCart)); } catch { } }
+
+        const savedDraft = localStorage.getItem(`myshop_checkout_draft_${shop.id}`);
+        if (savedDraft) {
+            try {
+                const draft = JSON.parse(savedDraft) as {
+                    fullName?: string;
+                    address?: string;
+                    city?: string;
+                    postalCode?: string;
+                    paymentMethod?: 'card' | 'cod';
+                };
+                setFullName(draft.fullName || '');
+                setAddress(draft.address || '');
+                setCity(draft.city || '');
+                setPostalCode(draft.postalCode || '');
+                setPaymentMethod(draft.paymentMethod === 'cod' ? 'cod' : 'card');
+            } catch {
+                // ignore malformed draft
+            }
+        }
+
         const fetchSession = async () => {
             const { data: { session } } = await supabase.auth.getSession();
             if (session?.user) { setSessionUser(session.user); setCustomerEmail(session.user.email || ''); }
-            else { router.push(`/shop/${shop.route_path}/login`); }
         };
         fetchSession();
     }, [shop.id, shop.route_path, router, supabase.auth]);
+
+    useEffect(() => {
+        const draft = {
+            fullName,
+            address,
+            city,
+            postalCode,
+            paymentMethod,
+        };
+        localStorage.setItem(`myshop_checkout_draft_${shop.id}`, JSON.stringify(draft));
+    }, [shop.id, fullName, address, city, postalCode, paymentMethod]);
 
     const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantityMultiplier), 0);
     const rawTaxRate = typeof shop.tax_rate === 'number' ? shop.tax_rate : parseFloat(shop.tax_rate ?? '0');
@@ -106,7 +137,19 @@ export default function CheckoutClient({ shop }: { shop: ShopData }) {
         setErrors(errs);
         setTouched({ fullName: true, address: true, city: true, postalCode: true });
         if (Object.keys(errs).length > 0) return;
-        if (!sessionUser || cart.length === 0) return;
+        if (cart.length === 0) return;
+
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) {
+            alert('Please log in to place your order. You will be redirected to login.');
+            router.push(`/shop/${shop.route_path}/login?next=${encodeURIComponent(`/shop/${shop.route_path}/checkout`)}`);
+            return;
+        }
+
+        if (!sessionUser) {
+            setSessionUser(session.user);
+            setCustomerEmail(session.user.email || '');
+        }
 
         setIsCheckingOut(true);
         try {
@@ -134,6 +177,7 @@ export default function CheckoutClient({ shop }: { shop: ShopData }) {
             }
 
             localStorage.removeItem(`myshop_cart_${shop.id}`);
+            localStorage.removeItem(`myshop_checkout_draft_${shop.id}`);
             setOrderSuccess('Payment successful. Your order has been placed successfully. Redirecting...');
             setTimeout(() => {
                 router.push(`/shop/${shop.route_path}/checkout/success?orderId=${json.orderId}`);

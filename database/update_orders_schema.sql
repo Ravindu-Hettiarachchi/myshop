@@ -62,3 +62,106 @@ SET
     ordered_unit = COALESCE(ordered_unit, 'item'),
     selling_unit_value = COALESCE(selling_unit_value, 1),
     selling_unit = COALESCE(selling_unit, 'item');
+
+-- 7. Tie orders to authenticated customer identity
+ALTER TABLE public.orders
+    ADD COLUMN IF NOT EXISTS customer_auth_id UUID REFERENCES auth.users(id) ON DELETE SET NULL;
+
+UPDATE public.orders
+SET customer_auth_id = auth.uid()
+WHERE customer_auth_id IS NULL
+  AND customer_email = current_setting('request.jwt.claims', true)::json->>'email';
+
+CREATE INDEX IF NOT EXISTS idx_orders_shop_customer_auth
+    ON public.orders (shop_id, customer_auth_id);
+
+-- 8. Customer-facing policies based on ownership (customer_auth_id)
+DROP POLICY IF EXISTS "Customers can view their own orders" ON public.orders;
+CREATE POLICY "Customers can view their own orders"
+ON public.orders FOR SELECT
+TO authenticated
+USING (customer_auth_id = auth.uid());
+
+DROP POLICY IF EXISTS "Customers can insert orders" ON public.orders;
+CREATE POLICY "Customers can insert orders"
+ON public.orders FOR INSERT
+TO authenticated
+WITH CHECK (customer_auth_id = auth.uid());
+
+DROP POLICY IF EXISTS "Customers can view their order items" ON public.order_items;
+CREATE POLICY "Customers can view their order items"
+ON public.order_items FOR SELECT
+TO authenticated
+USING (
+    EXISTS (
+        SELECT 1
+        FROM public.orders o
+        WHERE o.id = order_items.order_id
+          AND o.customer_auth_id = auth.uid()
+    )
+);
+
+-- 9. Shop-scoped customer linkage
+CREATE TABLE IF NOT EXISTS public.shop_customers (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    shop_id UUID NOT NULL REFERENCES public.shops(id) ON DELETE CASCADE,
+    auth_user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    full_name TEXT,
+    email TEXT,
+    phone TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
+    UNIQUE(shop_id, auth_user_id)
+);
+
+ALTER TABLE public.shop_customers ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE public.orders
+    ADD COLUMN IF NOT EXISTS shop_customer_id UUID REFERENCES public.shop_customers(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_shop_customers_shop_user
+    ON public.shop_customers (shop_id, auth_user_id);
+
+CREATE INDEX IF NOT EXISTS idx_orders_shop_customer_id
+    ON public.orders (shop_customer_id);
+
+DROP POLICY IF EXISTS "Customers can insert orders" ON public.orders;
+CREATE POLICY "Customers can insert orders"
+ON public.orders FOR INSERT
+TO authenticated
+WITH CHECK (
+    customer_auth_id = auth.uid()
+    AND (
+        shop_customer_id IS NULL
+        OR EXISTS (
+            SELECT 1 FROM public.shop_customers sc
+            WHERE sc.id = orders.shop_customer_id
+              AND sc.shop_id = orders.shop_id
+              AND sc.auth_user_id = auth.uid()
+        )
+    )
+);
+
+DROP POLICY IF EXISTS "Anyone can insert order items" ON public.order_items;
+DROP POLICY IF EXISTS "Customers can insert order items" ON public.order_items;
+CREATE POLICY "Customers can insert own order items"
+ON public.order_items FOR INSERT
+TO authenticated
+WITH CHECK (
+    EXISTS (
+        SELECT 1 FROM public.orders o
+        WHERE o.id = order_items.order_id
+          AND o.customer_auth_id = auth.uid()
+    )
+);
+
+DROP POLICY IF EXISTS "Public can view order items" ON public.order_items;
+
+DROP POLICY IF EXISTS "Customers can manage own shop customer profile" ON public.shop_customers;
+CREATE POLICY "Customers can manage own shop customer profile"
+ON public.shop_customers FOR ALL
+TO authenticated
+USING (auth_user_id = auth.uid())
+WITH CHECK (auth_user_id = auth.uid());
+
+ALTER PUBLICATION supabase_realtime ADD TABLE shop_customers;

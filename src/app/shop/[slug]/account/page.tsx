@@ -1,8 +1,8 @@
 import { createClient } from '@/utils/supabase/server';
 import Link from 'next/link';
-import { Package, Receipt, ArrowRight, UserCircle } from 'lucide-react';
+import { Package, UserCircle } from 'lucide-react';
 import { redirect } from 'next/navigation';
-import AccountClient, { LogoutButton, CancelOrderButton } from '@/components/shop/AccountClient';
+import { LogoutButton } from '@/components/shop/AccountClient';
 import CustomerOrdersClient from '@/components/shop/CustomerOrdersClient';
 
 export default async function CustomerAccountPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -19,7 +19,7 @@ export default async function CustomerAccountPage({ params }: { params: Promise<
         .from('orders')
         .select(`id, total_amount, status, invoice_url, created_at, order_items(id)`)
         .eq('shop_id', shop.id)
-        .eq('customer_email', session.user.email)
+        .eq('customer_auth_id', session.user.id)
         .order('created_at', { ascending: false });
 
     const isDark = shop.template === 'modern-dark';
@@ -71,7 +71,7 @@ export default async function CustomerAccountPage({ params }: { params: Promise<
                             <div className={`p-14 text-center border-2 border-dashed rounded-3xl ${tStyles.card}`}>
                                 <Package className={`w-12 h-12 mx-auto mb-4 ${tStyles.textMuted} opacity-40`} />
                                 <h3 className="text-lg font-bold mb-2">No orders yet</h3>
-                                <p className={`${tStyles.textMuted} mb-6 text-sm`}>You haven't placed any orders with {shop.shop_name} yet.</p>
+                                <p className={`${tStyles.textMuted} mb-6 text-sm`}>You haven&apos;t placed any orders with {shop.shop_name} yet.</p>
                                 <Link href={`/shop/${slug}`} className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 transition text-sm">
                                     Start Shopping →
                                 </Link>

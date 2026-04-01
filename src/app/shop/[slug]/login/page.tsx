@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ShoppingBag, Loader2 } from 'lucide-react';
 
@@ -15,9 +15,42 @@ function FieldError({ msg }: { msg?: string }) {
 
 type Fields = 'email' | 'password';
 
+async function ensureShopCustomerLink(args: {
+    slug: string;
+    userId: string;
+    email: string;
+    fullName?: string | null;
+}) {
+    const supabase = createClient();
+    const { data: shop } = await supabase
+        .from('shops')
+        .select('id')
+        .eq('route_path', args.slug)
+        .maybeSingle<{ id: string }>();
+
+    if (!shop?.id) return;
+
+    const { error } = await supabase
+        .from('shop_customers')
+        .upsert(
+            {
+                shop_id: shop.id,
+                auth_user_id: args.userId,
+                email: args.email,
+                full_name: args.fullName ?? null,
+            },
+            { onConflict: 'shop_id,auth_user_id' }
+        );
+
+    if (error) {
+        console.warn('Failed to link shop customer profile:', error.message);
+    }
+}
+
 export default function CustomerLogin({ params }: { params: Promise<{ slug: string }> }) {
     const { slug } = React.use(params);
     const router = useRouter();
+    const searchParams = useSearchParams();
     const supabase = createClient();
     const [isLoading, setIsLoading] = useState(false);
     const [email, setEmail] = useState('');
@@ -49,12 +82,26 @@ export default function CustomerLogin({ params }: { params: Promise<{ slug: stri
 
         setIsLoading(true);
         try {
-            const { error } = await supabase.auth.signInWithPassword({ email, password });
+            const { data, error } = await supabase.auth.signInWithPassword({ email, password });
             if (error) throw error;
-            router.push(`/shop/${slug}`);
+
+            const userId = data.user?.id;
+            const userEmail = data.user?.email || email;
+            if (userId) {
+                await ensureShopCustomerLink({
+                    slug,
+                    userId,
+                    email: userEmail,
+                    fullName: data.user?.user_metadata?.full_name as string | undefined,
+                });
+            }
+
+            const nextPath = searchParams.get('next');
+            const safeNext = nextPath && nextPath.startsWith(`/shop/${slug}/`) ? nextPath : `/shop/${slug}`;
+            router.push(safeNext);
             router.refresh();
-        } catch (error: any) {
-            setServerError(error.message || 'Login failed. Check your credentials.');
+        } catch (error: unknown) {
+            setServerError(error instanceof Error ? error.message : 'Login failed. Check your credentials.');
         } finally {
             setIsLoading(false);
         }
@@ -106,8 +153,13 @@ export default function CustomerLogin({ params }: { params: Promise<{ slug: stri
                 </div>
 
                 <p className="text-center text-sm text-gray-500 mt-6">
-                    Don't have an account?{' '}
-                    <Link href={`/shop/${slug}/signup`} className="font-semibold text-gray-900 hover:underline">Create one</Link>
+                    Don&apos;t have an account?{' '}
+                    <Link
+                        href={`/shop/${slug}/signup${searchParams.get('next') ? `?next=${encodeURIComponent(searchParams.get('next') || '')}` : ''}`}
+                        className="font-semibold text-gray-900 hover:underline"
+                    >
+                        Create one
+                    </Link>
                 </p>
             </div>
         </div>

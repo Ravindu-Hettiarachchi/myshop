@@ -86,6 +86,18 @@ export async function proxy(request: NextRequest) {
         }
     }
 
+    // 4. Protected customer shop routes (require login)
+    const protectedShopRoute = /^\/shop\/[^/]+\/(checkout|orders|account|order\/[^/]+|invoice\/[^/]+)(\/)?$/;
+    if (protectedShopRoute.test(path) && !user) {
+        const match = path.match(/^\/shop\/([^/]+)\//);
+        const slug = match?.[1];
+        if (slug) {
+            const loginUrl = new URL(`/shop/${slug}/login`, request.url);
+            loginUrl.searchParams.set('next', `${path}${request.nextUrl.search}`);
+            return NextResponse.redirect(loginUrl);
+        }
+    }
+
     /* --------------------------------------------------------------------------
      * Subdomain Routing (customer storefront): bike.myshop.com -> /shop/bike
      * -------------------------------------------------------------------------- */

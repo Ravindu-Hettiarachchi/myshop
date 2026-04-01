@@ -69,6 +69,8 @@ interface Props {
     onOpenCart: () => void;
     cartCount: number;
     sessionUser: unknown;
+    customerDisplayName?: string;
+    onLogout?: () => void | Promise<void>;
     themeConfig: DynamicThemeConfig;
 }
 
@@ -150,7 +152,7 @@ function footerTextColor(footerBg: string | undefined, textColor: string): strin
 
 // ─── Component ──────────────────────────────────────────────
 export default function DynamicTheme({
-    shop, products, onAddToCart, onOpenCart, cartCount, sessionUser, themeConfig: c
+    shop, products, onAddToCart, onOpenCart, cartCount, sessionUser, customerDisplayName, onLogout, themeConfig: c
 }: Props) {
     const accentRgb = hex2rgb(c.accent_color);
     const secondaryColor = c.secondary_color || '#6366F1';
@@ -291,22 +293,46 @@ export default function DynamicTheme({
                             )}
                         </button>
                         {sessionUser ? (
-                            <a
-                                href={`/shop/${shop.route_path}/account`}
-                                style={{ color: headerText }}
-                                className="text-sm font-semibold hover:opacity-70 transition hidden sm:block"
-                            >Account</a>
+                            <>
+                                <a
+                                    href={`/shop/${shop.route_path}/orders`}
+                                    style={{ color: headerText }}
+                                    className="text-sm font-semibold hover:opacity-70 transition hidden sm:block"
+                                >{customerDisplayName || 'Account'}</a>
+                                <a
+                                    href={`/shop/${shop.route_path}/orders`}
+                                    style={{ color: headerText }}
+                                    className="text-sm font-semibold hover:opacity-70 transition hidden sm:block"
+                                >My Orders</a>
+                                <button
+                                    onClick={onLogout}
+                                    style={{ color: headerText }}
+                                    className="text-sm font-semibold hover:opacity-70 transition hidden sm:block"
+                                >Logout</button>
+                            </>
                         ) : (
-                            <a
-                                href={`/shop/${shop.route_path}/login`}
-                                style={{
-                                    background: isColoredHeader ? 'rgba(255,255,255,0.2)' : c.accent_color,
-                                    color: '#fff',
-                                    borderRadius: btnRadius,
-                                    border: c.button_style === 'outline' && !isColoredHeader ? `2px solid ${c.accent_color}` : 'none',
-                                }}
-                                className="text-xs font-bold px-4 py-2 transition hover:opacity-85 hidden sm:block"
-                            >Login</a>
+                            <>
+                                <a
+                                    href={`/shop/${shop.route_path}/login`}
+                                    style={{ color: headerText }}
+                                    className="text-sm font-semibold hover:opacity-70 transition hidden sm:block"
+                                >Login</a>
+                                <a
+                                    href={`/shop/${shop.route_path}/signup`}
+                                    style={{ color: headerText }}
+                                    className="text-sm font-semibold hover:opacity-70 transition hidden sm:block"
+                                >Signup</a>
+                                <a
+                                    href={`/shop/${shop.route_path}/login?next=${encodeURIComponent(`/shop/${shop.route_path}/orders`)}`}
+                                    style={{
+                                        background: isColoredHeader ? 'rgba(255,255,255,0.2)' : c.accent_color,
+                                        color: '#fff',
+                                        borderRadius: btnRadius,
+                                        border: c.button_style === 'outline' && !isColoredHeader ? `2px solid ${c.accent_color}` : 'none',
+                                    }}
+                                    className="text-xs font-bold px-4 py-2 transition hover:opacity-85 hidden sm:block"
+                                >My Orders</a>
+                            </>
                         )}
                     </div>
                 </div>

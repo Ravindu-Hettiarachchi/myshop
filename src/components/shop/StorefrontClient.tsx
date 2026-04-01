@@ -7,6 +7,7 @@ import { createClient } from '@/utils/supabase/client';
 import { getThemeComponent, isThemeDark } from '@/lib/themes';
 import DynamicTheme, { type DynamicThemeConfig } from '@/components/storefronts/DynamicTheme';
 import { formatPriceWithUnit, formatQuantityLabel, normalizeSellingUnit, normalizeStockUnit, normalizeUnitValue, type ProductUnit } from '@/lib/products';
+import type { User } from '@supabase/supabase-js';
 
 interface Product {
     id: string;
@@ -70,7 +71,7 @@ interface Props {
     routePath: string;
     shopConfig: ShopConfig;
     productList: StorefrontProduct[];
-    sessionUserInit: unknown;
+    sessionUserInit: User | null;
     themeConfig?: ThemeConfigRow | null;
 }
 
@@ -81,7 +82,7 @@ export default function StorefrontClient({ routePath, shopConfig, productList, s
     const [cart, setCart] = useState<CartItem[]>([]);
     const [isCartOpen, setIsCartOpen] = useState(false);
     const [isCheckingOut, setIsCheckingOut] = useState(false);
-    const [sessionUser, setSessionUser] = useState(sessionUserInit);
+    const [sessionUser, setSessionUser] = useState<User | null>(sessionUserInit);
     const [productPicker, setProductPicker] = useState<{ product: Product; quantityMultiplier: number } | null>(null);
 
     // Initial mapping of products from backend format to Cart format
@@ -196,7 +197,7 @@ export default function StorefrontClient({ routePath, shopConfig, productList, s
 
         if (!session?.user) {
             alert('You must be logged in to securely place an order. Redirecting you to login...');
-            router.push(`/shop/${routePath}/login`);
+            router.push(`/shop/${routePath}/login?next=${encodeURIComponent(`/shop/${routePath}/checkout`)}`);
             return;
         }
 
@@ -213,6 +214,15 @@ export default function StorefrontClient({ routePath, shopConfig, productList, s
             setIsCheckingOut(false);
         }
     };
+
+    const handleLogout = async () => {
+        await supabase.auth.signOut();
+        setSessionUser(null);
+        router.push(`/shop/${routePath}`);
+        router.refresh();
+    };
+
+    const customerDisplayName = sessionUser?.user_metadata?.full_name || sessionUser?.email?.split('@')[0] || 'Account';
 
     // Render Logic — custom DB-driven theme OR coded registry theme
     const renderTemplate = () => {
@@ -237,6 +247,8 @@ export default function StorefrontClient({ routePath, shopConfig, productList, s
                     onOpenCart={() => setIsCartOpen(true)}
                     cartCount={cartCount}
                     sessionUser={sessionUser}
+                    customerDisplayName={customerDisplayName}
+                    onLogout={handleLogout}
                     themeConfig={dynamicCfg}
                 />
             );
@@ -252,6 +264,8 @@ export default function StorefrontClient({ routePath, shopConfig, productList, s
                 onOpenCart={() => setIsCartOpen(true)}
                 cartCount={cartCount}
                 sessionUser={sessionUser}
+                customerDisplayName={customerDisplayName}
+                onLogout={handleLogout}
             />
         );
     };
@@ -358,7 +372,11 @@ export default function StorefrontClient({ routePath, shopConfig, productList, s
                                                 <p className="opacity-90 leading-tight">Please connect your account to securely place this order and track its status.</p>
                                             </div>
                                             <button
-                                                onClick={() => { setIsCartOpen(false); router.push(`/shop/${routePath}/login`); }}
+                                                onClick={() => {
+                                                    alert('Please log in to continue to checkout.');
+                                                    setIsCartOpen(false);
+                                                    router.push(`/shop/${routePath}/login?next=${encodeURIComponent(`/shop/${routePath}/checkout`)}`);
+                                                }}
                                                 className={`w-full py-4 rounded-xl ${theme.buttonBg} font-bold shadow-lg flex justify-center items-center gap-2`}
                                             >
                                                 Sign In to Continue

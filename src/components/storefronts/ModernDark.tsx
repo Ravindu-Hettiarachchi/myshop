@@ -32,9 +32,11 @@ interface Props {
     cartCount?: number;
     onOpenCart?: () => void;
     sessionUser?: unknown;
+    customerDisplayName?: string;
+    onLogout?: () => void | Promise<void>;
 }
 
-export default function ModernDark({ shop, products, onAddToCart, cartCount = 0, onOpenCart, sessionUser }: Props) {
+export default function ModernDark({ shop, products, onAddToCart, cartCount = 0, onOpenCart, sessionUser, customerDisplayName, onLogout }: Props) {
     const primaryColor = shop.primary_color || '#7C3AED';
     const featured = products.slice(0, 3);
     const rest = products.slice(3);
@@ -67,14 +69,34 @@ export default function ModernDark({ shop, products, onAddToCart, cartCount = 0,
                             <a href="#features" className="hover:text-white transition-colors">Features</a>
                         </nav>
                         <div className="flex items-center gap-2">
+                            {!sessionUser && (
+                                <>
+                                    <a href={`/shop/${shop.route_path}/login`} className="hidden sm:flex items-center text-sm text-white/60 hover:text-white px-3 py-1.5 rounded-lg hover:bg-white/5 transition">
+                                        Login
+                                    </a>
+                                    <a href={`/shop/${shop.route_path}/signup`} className="hidden sm:flex items-center text-sm text-white/60 hover:text-white px-3 py-1.5 rounded-lg hover:bg-white/5 transition">
+                                        Signup
+                                    </a>
+                                </>
+                            )}
                             {sessionUser ? (
-                                <a href={`/shop/${shop.route_path}/account`} className="hidden sm:flex items-center text-sm text-white/50 hover:text-white px-3 py-1.5 rounded-lg hover:bg-white/5 transition">
-                                    My Orders
+                                <a href={`/shop/${shop.route_path}/orders`} className="hidden sm:flex items-center text-sm text-white/50 hover:text-white px-3 py-1.5 rounded-lg hover:bg-white/5 transition">
+                                    {customerDisplayName || 'Account'}
                                 </a>
                             ) : (
-                                <a href={`/shop/${shop.route_path}/login`} className="hidden sm:flex items-center text-sm text-white/50 hover:text-white px-3 py-1.5 rounded-lg hover:bg-white/5 transition">
-                                    Sign In
+                                <a href={`/shop/${shop.route_path}/login?next=${encodeURIComponent(`/shop/${shop.route_path}/orders`)}`} className="hidden sm:flex items-center text-sm text-white/50 hover:text-white px-3 py-1.5 rounded-lg hover:bg-white/5 transition">
+                                    My Orders
                                 </a>
+                            )}
+                            {Boolean(sessionUser) && (
+                                <>
+                                    <a href={`/shop/${shop.route_path}/orders`} className="hidden sm:flex items-center text-sm text-white/50 hover:text-white px-3 py-1.5 rounded-lg hover:bg-white/5 transition">
+                                        My Orders
+                                    </a>
+                                    <button onClick={onLogout} className="hidden sm:flex items-center text-sm text-white/50 hover:text-red-300 px-3 py-1.5 rounded-lg hover:bg-white/5 transition">
+                                        Logout
+                                    </button>
+                                </>
                             )}
                             <button
                                 onClick={onOpenCart}

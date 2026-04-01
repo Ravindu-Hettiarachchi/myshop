@@ -60,6 +60,8 @@ CREATE TABLE products (
 CREATE TABLE orders (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     shop_id UUID REFERENCES shops(id) ON DELETE CASCADE,
+    customer_auth_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    shop_customer_id UUID,
     customer_email VARCHAR(255),
     total_amount DECIMAL(10, 2) NOT NULL,
     status order_status DEFAULT 'processing', -- Status Tracker (Processing -> Shipped -> Delivered)
@@ -67,6 +69,23 @@ CREATE TABLE orders (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- 4.1 Shop Customers Table (shop-aware customer identity)
+CREATE TABLE shop_customers (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    shop_id UUID REFERENCES shops(id) ON DELETE CASCADE,
+    auth_user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    full_name TEXT,
+    email TEXT,
+    phone TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(shop_id, auth_user_id)
+);
+
+ALTER TABLE orders
+    ADD CONSTRAINT fk_orders_shop_customer
+    FOREIGN KEY (shop_customer_id) REFERENCES shop_customers(id) ON DELETE SET NULL;
 
 -- 5. Order Items Table (Line items for each order)
 CREATE TABLE order_items (
@@ -87,6 +106,7 @@ ALTER TABLE owners ENABLE ROW LEVEL SECURITY;
 ALTER TABLE shops ENABLE ROW LEVEL SECURITY;
 ALTER TABLE products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE shop_customers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE order_items ENABLE ROW LEVEL SECURITY;
 
 -- 1. Owners Table Policies
@@ -133,7 +153,20 @@ CREATE POLICY "Shop owners can view shop orders" ON orders
     );
 
 CREATE POLICY "Customers can insert orders" ON orders
-    FOR INSERT WITH CHECK (true);
+    FOR INSERT WITH CHECK (
+        customer_auth_id = auth.uid()
+        AND (
+            shop_customer_id IS NULL OR EXISTS (
+                SELECT 1 FROM shop_customers sc
+                WHERE sc.id = orders.shop_customer_id
+                  AND sc.shop_id = orders.shop_id
+                  AND sc.auth_user_id = auth.uid()
+            )
+        )
+    );
+
+CREATE POLICY "Customers can view their own orders" ON orders
+    FOR SELECT USING (customer_auth_id = auth.uid());
 
 -- 5. Order Items Table Policies
 CREATE POLICY "Shop owners can view shop order items" ON order_items
@@ -145,8 +178,27 @@ CREATE POLICY "Shop owners can view shop order items" ON order_items
         )
     );
 
-CREATE POLICY "Customers can insert order items" ON order_items
-    FOR INSERT WITH CHECK (true);
+CREATE POLICY "Customers can view their own order items" ON order_items
+    FOR SELECT USING (
+        EXISTS (
+            SELECT 1 FROM orders
+            WHERE orders.id = order_items.order_id
+              AND orders.customer_auth_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Customers can insert own order items" ON order_items
+    FOR INSERT WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM orders
+            WHERE orders.id = order_items.order_id
+              AND orders.customer_auth_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Customers can manage own shop customer profile" ON shop_customers
+    FOR ALL USING (auth_user_id = auth.uid())
+    WITH CHECK (auth_user_id = auth.uid());
 
 ---------------------------------------------------------------------------------
 -- Example Seed Data reflecting Sri Lankan market aesthetics

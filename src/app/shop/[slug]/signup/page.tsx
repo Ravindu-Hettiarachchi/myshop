@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ShoppingBag, Loader2, CheckCircle2 } from 'lucide-react';
 
@@ -15,9 +15,42 @@ function FieldError({ msg }: { msg?: string }) {
 
 type Fields = 'fullName' | 'email' | 'password' | 'confirm';
 
+async function ensureShopCustomerLink(args: {
+    slug: string;
+    userId: string;
+    email: string;
+    fullName?: string | null;
+}) {
+    const supabase = createClient();
+    const { data: shop } = await supabase
+        .from('shops')
+        .select('id')
+        .eq('route_path', args.slug)
+        .maybeSingle<{ id: string }>();
+
+    if (!shop?.id) return;
+
+    const { error } = await supabase
+        .from('shop_customers')
+        .upsert(
+            {
+                shop_id: shop.id,
+                auth_user_id: args.userId,
+                email: args.email,
+                full_name: args.fullName ?? null,
+            },
+            { onConflict: 'shop_id,auth_user_id' }
+        );
+
+    if (error) {
+        console.warn('Failed to link shop customer profile:', error.message);
+    }
+}
+
 export default function CustomerSignup({ params }: { params: Promise<{ slug: string }> }) {
     const { slug } = React.use(params);
     const router = useRouter();
+    const searchParams = useSearchParams();
     const supabase = createClient();
     const [isLoading, setIsLoading] = useState(false);
     const [fullName, setFullName] = useState('');
@@ -62,11 +95,20 @@ export default function CustomerSignup({ params }: { params: Promise<{ slug: str
                     id: data.user.id, email: data.user.email, full_name: fullName, role: 'customer'
                 });
                 if (profileError) console.warn('Could not insert profile', profileError);
+
+                await ensureShopCustomerLink({
+                    slug,
+                    userId: data.user.id,
+                    email: data.user.email || email,
+                    fullName,
+                });
             }
-            router.push(`/shop/${slug}`);
+            const nextPath = searchParams.get('next');
+            const safeNext = nextPath && nextPath.startsWith(`/shop/${slug}/`) ? nextPath : `/shop/${slug}`;
+            router.push(safeNext);
             router.refresh();
-        } catch (error: any) {
-            setServerError(error.message || 'Registration failed. Please try again.');
+        } catch (error: unknown) {
+            setServerError(error instanceof Error ? error.message : 'Registration failed. Please try again.');
         } finally {
             setIsLoading(false);
         }
@@ -154,7 +196,12 @@ export default function CustomerSignup({ params }: { params: Promise<{ slug: str
 
                 <p className="text-center text-sm text-gray-500 mt-6">
                     Already have an account?{' '}
-                    <Link href={`/shop/${slug}/login`} className="font-semibold text-gray-900 hover:underline">Sign in</Link>
+                    <Link
+                        href={`/shop/${slug}/login${searchParams.get('next') ? `?next=${encodeURIComponent(searchParams.get('next') || '')}` : ''}`}
+                        className="font-semibold text-gray-900 hover:underline"
+                    >
+                        Sign in
+                    </Link>
                 </p>
             </div>
         </div>

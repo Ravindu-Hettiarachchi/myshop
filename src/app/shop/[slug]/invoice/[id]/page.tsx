@@ -1,5 +1,5 @@
 import { createClient } from '@/utils/supabase/server';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { MapPin, Phone, Mail, FileText, Truck } from 'lucide-react';
 import Link from 'next/link';
 import PrintButton from './PrintButton';
@@ -55,6 +55,11 @@ export default async function InvoicePage({ params }: { params: Promise<{ slug: 
     const { slug, id } = await params;
     const supabase = await createClient();
 
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+        redirect(`/shop/${slug}/login?next=${encodeURIComponent(`/shop/${slug}/invoice/${id}`)}`);
+    }
+
     // 1. Fetch Shop
     const { data: shop, error: shopError } = await supabase
         .from('shops')
@@ -65,7 +70,13 @@ export default async function InvoicePage({ params }: { params: Promise<{ slug: 
     if (shopError || !shop) notFound();
 
     // 2. Fetch Order + Items
-    const { data: order, error: orderError } = await supabase
+    const { data: ownerProfile } = await supabase
+        .from('owners')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle<{ role?: string | null }>();
+
+    let orderQuery = supabase
         .from('orders')
         .select(`
             *,
@@ -75,8 +86,13 @@ export default async function InvoicePage({ params }: { params: Promise<{ slug: 
             )
         `)
         .eq('id', id)
-        .eq('shop_id', shop.id)
-        .maybeSingle<InvoiceOrder>();
+        .eq('shop_id', shop.id);
+
+    if (ownerProfile?.role === 'customer') {
+        orderQuery = orderQuery.eq('customer_auth_id', user.id);
+    }
+
+    const { data: order, error: orderError } = await orderQuery.maybeSingle<InvoiceOrder>();
 
     if (orderError || !order) {
         return (

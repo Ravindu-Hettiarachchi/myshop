@@ -41,6 +41,39 @@ export async function POST(req: NextRequest) {
         }
 
         const supabase = await createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            return NextResponse.json({ error: 'Authentication required to place an order.' }, { status: 401 });
+        }
+
+        const { data: shop } = await supabase
+            .from('shops')
+            .select('id')
+            .eq('id', body.shopId)
+            .maybeSingle<{ id: string }>();
+
+        if (!shop) {
+            return NextResponse.json({ error: 'Shop not found.' }, { status: 404 });
+        }
+
+        let shopCustomerId: string | null = null;
+        const upsertShopCustomer = await supabase
+            .from('shop_customers')
+            .upsert(
+                {
+                    shop_id: shop.id,
+                    auth_user_id: user.id,
+                    email: user.email || body.customer.email,
+                    full_name: body.customer.fullName,
+                },
+                { onConflict: 'shop_id,auth_user_id' }
+            )
+            .select('id')
+            .single<{ id: string }>();
+
+        if (!upsertShopCustomer.error) {
+            shopCustomerId = upsertShopCustomer.data?.id ?? null;
+        }
 
         const productIds = body.items.map((i) => i.id);
         const { data: products, error: productError } = await supabase
@@ -91,23 +124,47 @@ export async function POST(req: NextRequest) {
             return sum + unitPrice * Math.max(1, Math.floor(toNumber(item.quantityMultiplier, 1)));
         }, 0);
 
-        const { data: orderData, error: orderError } = await supabase
+        const orderInsertPayload = {
+            shop_id: body.shopId,
+            customer_auth_id: user.id,
+            shop_customer_id: shopCustomerId,
+            customer_email: user.email || body.customer.email,
+            customer_name: body.customer.fullName,
+            customer_address: body.customer.address,
+            customer_city: body.customer.city,
+            customer_postal: body.customer.postalCode,
+            payment_method: body.paymentMethod,
+            total_amount: totalAmount,
+            status: 'processing',
+        };
+
+        let { data: orderData, error: orderError } = await supabase
             .from('orders')
-            .insert([
-                {
-                    shop_id: body.shopId,
-                    customer_email: body.customer.email,
-                    customer_name: body.customer.fullName,
-                    customer_address: body.customer.address,
-                    customer_city: body.customer.city,
-                    customer_postal: body.customer.postalCode,
-                    payment_method: body.paymentMethod,
-                    total_amount: totalAmount,
-                    status: 'processing',
-                },
-            ])
+            .insert([orderInsertPayload])
             .select('id')
             .single<{ id: string }>();
+
+        if (orderError && /customer_auth_id|shop_customer_id/i.test(orderError.message)) {
+            const fallbackInsert = await supabase
+                .from('orders')
+                .insert([
+                    {
+                        shop_id: body.shopId,
+                        customer_email: user.email || body.customer.email,
+                        customer_name: body.customer.fullName,
+                        customer_address: body.customer.address,
+                        customer_city: body.customer.city,
+                        customer_postal: body.customer.postalCode,
+                        payment_method: body.paymentMethod,
+                        total_amount: totalAmount,
+                        status: 'processing',
+                    },
+                ])
+                .select('id')
+                .single<{ id: string }>();
+            orderData = fallbackInsert.data;
+            orderError = fallbackInsert.error;
+        }
 
         if (orderError || !orderData) {
             return NextResponse.json({ error: orderError?.message || 'Could not create order.' }, { status: 400 });

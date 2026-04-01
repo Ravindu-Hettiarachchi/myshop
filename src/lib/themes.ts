@@ -36,6 +36,8 @@ export interface StorefrontProps {
     onOpenCart: () => void;
     cartCount: number;
     sessionUser: unknown;
+    customerDisplayName?: string;
+    onLogout?: () => void | Promise<void>;
 }
 
 // Theme metadata used in the registry (code-side only, not from DB)

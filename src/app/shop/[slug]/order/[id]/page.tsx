@@ -74,6 +74,13 @@ export default function OrderTrackerPage({ params }: { params: Promise<{ slug: s
 
     const load = useCallback(async (s: string, id: string, isRefresh = false) => {
         if (isRefresh) setRefreshing(true);
+
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            window.location.href = `/shop/${s}/login?next=${encodeURIComponent(`/shop/${s}/order/${id}`)}`;
+            return;
+        }
+
         const { data: shopData } = await supabase
             .from('shops')
             .select('*, primary_color')
@@ -82,12 +89,23 @@ export default function OrderTrackerPage({ params }: { params: Promise<{ slug: s
         if (!shopData) { setLoading(false); return; }
         setShop(shopData);
 
-        const { data: orderData } = await supabase
+        const { data: ownerProfile } = await supabase
+            .from('owners')
+            .select('role')
+            .eq('id', user.id)
+            .maybeSingle<{ role?: string | null }>();
+
+        let orderQuery = supabase
             .from('orders')
             .select(`*, order_items(quantity, unit_price, ordered_quantity, ordered_unit, selling_unit_value, selling_unit, products(title, image_urls))`)
             .eq('id', id)
-            .eq('shop_id', shopData.id)
-            .single<OrderData>();
+            .eq('shop_id', shopData.id);
+
+        if (ownerProfile?.role === 'customer') {
+            orderQuery = orderQuery.eq('customer_auth_id', user.id);
+        }
+
+        const { data: orderData } = await orderQuery.single<OrderData>();
 
         setOrder(orderData);
         setLastRefreshed(new Date());

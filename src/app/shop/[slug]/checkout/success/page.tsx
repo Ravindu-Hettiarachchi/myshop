@@ -105,11 +105,11 @@ export default async function CheckoutSuccessPage({ params, searchParams }: Succ
                         </Link>
                         {order?.id && (
                             <Link
-                                href={`/shop/${shop.route_path}/order/${order.id}`}
+                                href={`/shop/${shop.route_path}/invoice/${order.id}`}
                                 className="flex-1 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-black text-white font-semibold hover:bg-gray-800 transition"
                             >
                                 <Receipt className="w-4 h-4" />
-                                View Order
+                                View Invoice
                             </Link>
                         )}
                     </div>

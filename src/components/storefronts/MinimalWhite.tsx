@@ -1,5 +1,5 @@
 import React from 'react';
-import { PackageOpen, ShoppingBag, ShieldCheck, Truck, RefreshCw, Star } from 'lucide-react';
+import { PackageOpen, ShoppingBag, ShieldCheck, Truck, RefreshCw, Star, CircleUserRound } from 'lucide-react';
 import { formatPriceWithUnit, type ProductUnit } from '@/lib/products';
 
 interface Product {
@@ -32,9 +32,11 @@ interface Props {
     cartCount?: number;
     onOpenCart?: () => void;
     sessionUser?: unknown;
+    customerDisplayName?: string;
+    onLogout?: () => void | Promise<void>;
 }
 
-export default function MinimalWhite({ shop, products, onAddToCart, cartCount = 0, onOpenCart, sessionUser }: Props) {
+export default function MinimalWhite({ shop, products, onAddToCart, cartCount = 0, onOpenCart, sessionUser, customerDisplayName, onLogout }: Props) {
     const primaryColor = shop.primary_color || '#2563EB';
     const featured = products.slice(0, 4);
     const rest = products.slice(4);
@@ -73,14 +75,39 @@ export default function MinimalWhite({ shop, products, onAddToCart, cartCount = 
 
                         {/* Actions */}
                         <div className="flex items-center gap-2">
+                            {!sessionUser && (
+                                <>
+                                    <a href={`/shop/${shop.route_path}/login`} className="hidden sm:flex items-center text-sm font-medium text-gray-500 hover:text-gray-900 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition">
+                                        Login
+                                    </a>
+                                    <a href={`/shop/${shop.route_path}/signup`} className="hidden sm:flex items-center text-sm font-medium text-gray-500 hover:text-gray-900 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition">
+                                        Signup
+                                    </a>
+                                </>
+                            )}
                             {sessionUser ? (
-                                <a href={`/shop/${shop.route_path}/account`} className="hidden sm:flex items-center text-sm font-medium text-gray-500 hover:text-gray-900 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition">
-                                    My Orders
+                                <a href={`/shop/${shop.route_path}/orders`} className="hidden sm:flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-900 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition">
+                                    <CircleUserRound className="w-4 h-4" />
+                                    {customerDisplayName || 'Account'}
                                 </a>
                             ) : (
-                                <a href={`/shop/${shop.route_path}/login`} className="hidden sm:flex items-center text-sm font-medium text-gray-500 hover:text-gray-900 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition">
-                                    Sign In
+                                <a href={`/shop/${shop.route_path}/login?next=${encodeURIComponent(`/shop/${shop.route_path}/orders`)}`} className="hidden sm:flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-900 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition">
+                                    <CircleUserRound className="w-4 h-4" />
+                                    My Orders
                                 </a>
+                            )}
+                            {Boolean(sessionUser) && (
+                                <>
+                                    <a href={`/shop/${shop.route_path}/orders`} className="hidden sm:flex items-center text-sm font-medium text-gray-500 hover:text-gray-900 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition">
+                                        My Orders
+                                    </a>
+                                    <button
+                                        onClick={onLogout}
+                                        className="hidden sm:flex items-center text-sm font-medium text-gray-500 hover:text-red-600 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition"
+                                    >
+                                        Logout
+                                    </button>
+                                </>
                             )}
                             <button
                                 onClick={onOpenCart}

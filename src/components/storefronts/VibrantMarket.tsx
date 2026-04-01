@@ -32,9 +32,11 @@ interface Props {
     cartCount?: number;
     onOpenCart?: () => void;
     sessionUser?: unknown;
+    customerDisplayName?: string;
+    onLogout?: () => void | Promise<void>;
 }
 
-export default function VibrantMarket({ shop, products, onAddToCart, cartCount = 0, onOpenCart, sessionUser }: Props) {
+export default function VibrantMarket({ shop, products, onAddToCart, cartCount = 0, onOpenCart, sessionUser, customerDisplayName, onLogout }: Props) {
     const primaryColor = shop.primary_color || '#F59E0B';
     const featured = products.slice(0, 4);
     const rest = products.slice(4);
@@ -69,14 +71,34 @@ export default function VibrantMarket({ shop, products, onAddToCart, cartCount =
                             <a href="#features" className="hover:text-gray-900 transition-colors">About</a>
                         </nav>
                         <div className="flex items-center gap-2">
+                            {!sessionUser && (
+                                <>
+                                    <a href={`/shop/${shop.route_path}/login`} className="hidden sm:flex items-center text-sm font-bold text-gray-500 hover:text-gray-900 px-3 py-1.5 rounded-xl hover:bg-gray-50 transition">
+                                        Login
+                                    </a>
+                                    <a href={`/shop/${shop.route_path}/signup`} className="hidden sm:flex items-center text-sm font-bold text-gray-500 hover:text-gray-900 px-3 py-1.5 rounded-xl hover:bg-gray-50 transition">
+                                        Signup
+                                    </a>
+                                </>
+                            )}
                             {sessionUser ? (
-                                <a href={`/shop/${shop.route_path}/account`} className="hidden sm:flex items-center text-sm font-bold text-gray-500 hover:text-gray-900 px-3 py-1.5 rounded-xl hover:bg-gray-50 transition">
-                                    My Orders
+                                <a href={`/shop/${shop.route_path}/orders`} className="hidden sm:flex items-center text-sm font-bold text-gray-500 hover:text-gray-900 px-3 py-1.5 rounded-xl hover:bg-gray-50 transition">
+                                    {customerDisplayName || 'Account'}
                                 </a>
                             ) : (
-                                <a href={`/shop/${shop.route_path}/login`} className="hidden sm:flex items-center text-sm font-bold text-gray-500 hover:text-gray-900 px-3 py-1.5 rounded-xl hover:bg-gray-50 transition">
-                                    Sign In
+                                <a href={`/shop/${shop.route_path}/login?next=${encodeURIComponent(`/shop/${shop.route_path}/orders`)}`} className="hidden sm:flex items-center text-sm font-bold text-gray-500 hover:text-gray-900 px-3 py-1.5 rounded-xl hover:bg-gray-50 transition">
+                                    My Orders
                                 </a>
+                            )}
+                            {Boolean(sessionUser) && (
+                                <>
+                                    <a href={`/shop/${shop.route_path}/orders`} className="hidden sm:flex items-center text-sm font-bold text-gray-500 hover:text-gray-900 px-3 py-1.5 rounded-xl hover:bg-gray-50 transition">
+                                        My Orders
+                                    </a>
+                                    <button onClick={onLogout} className="hidden sm:flex items-center text-sm font-bold text-gray-500 hover:text-red-500 px-3 py-1.5 rounded-xl hover:bg-gray-50 transition">
+                                        Logout
+                                    </button>
+                                </>
                             )}
                             <button
                                 onClick={onOpenCart}
