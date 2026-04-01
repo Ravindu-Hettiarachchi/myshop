@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/utils/supabase/client';
+import { useRouter } from 'next/navigation';
 import {
     Package, Search, ChevronDown, CheckCircle, Truck, Clock, X, ExternalLink, XCircle,
     Box, MapPin, Mail, Phone, Receipt, SendHorizonal, Loader2, Pencil, Check, ChevronRight
@@ -58,6 +59,7 @@ interface DashboardOrder {
 
 export default function OrdersDashboard() {
     const supabase = createClient();
+    const router = useRouter();
     const [orders, setOrders] = useState<DashboardOrder[]>([]);
     const [shopRoute, setShopRoute] = useState('');
     const [loading, setLoading] = useState(true);
@@ -72,7 +74,24 @@ export default function OrdersDashboard() {
         async function fetchOrders() {
             setLoading(true);
             const { data: { user } } = await supabase.auth.getUser();
-            if (!user) { setLoading(false); return; }
+            if (!user) {
+                router.replace('/login?next=/dashboard/orders');
+                setLoading(false);
+                return;
+            }
+
+            const { data: owner } = await supabase
+                .from('owners')
+                .select('role')
+                .eq('id', user.id)
+                .maybeSingle<{ role: string | null }>();
+
+            if (owner?.role !== 'shop_owner' && owner?.role !== 'admin') {
+                router.replace('/');
+                setLoading(false);
+                return;
+            }
+
             const { data: shop } = await supabase.from('shops').select('id, route_path').eq('owner_id', user.id).single();
             if (shop) {
                 setShopRoute(shop.route_path);
@@ -86,7 +105,7 @@ export default function OrdersDashboard() {
             setLoading(false);
         }
         fetchOrders();
-    }, [supabase]);
+    }, [supabase, router]);
 
     const handleStatusChange = async (orderId: string, newStatus: string) => {
         const now = new Date().toISOString();

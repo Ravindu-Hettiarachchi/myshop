@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
-import { createClient } from '@/utils/supabase/client';
+import { createCustomerClient } from '@/utils/supabase/customer-client';
 import { Package, Truck, CheckCircle, Store, Receipt, Clock, Box, MapPin, Mail, Phone, AlertCircle, RefreshCw, ExternalLink } from 'lucide-react';
 import { formatPriceWithUnit, formatQuantityLabel } from '@/lib/products';
 
@@ -62,7 +62,7 @@ const STATUS_COLOR: Record<string, { ring: string; bg: string; text: string }> =
 };
 
 export default function OrderTrackerPage({ params }: { params: Promise<{ slug: string; id: string }> }) {
-    const supabase = createClient();
+    const supabase = createCustomerClient();
     const [order, setOrder] = useState<OrderData | null>(null);
     const [shop, setShop] = useState<ShopData | null>(null);
     const [loading, setLoading] = useState(true);
@@ -89,23 +89,25 @@ export default function OrderTrackerPage({ params }: { params: Promise<{ slug: s
         if (!shopData) { setLoading(false); return; }
         setShop(shopData);
 
-        const { data: ownerProfile } = await supabase
-            .from('owners')
-            .select('role')
-            .eq('id', user.id)
-            .maybeSingle<{ role?: string | null }>();
+        const { data: shopCustomer } = await supabase
+            .from('shop_customers')
+            .select('id')
+            .eq('shop_id', shopData.id)
+            .eq('auth_user_id', user.id)
+            .maybeSingle<{ id: string }>();
 
-        let orderQuery = supabase
+        if (!shopCustomer?.id) {
+            window.location.href = `/shop/${s}`;
+            return;
+        }
+
+        const { data: orderData } = await supabase
             .from('orders')
             .select(`*, order_items(quantity, unit_price, ordered_quantity, ordered_unit, selling_unit_value, selling_unit, products(title, image_urls))`)
             .eq('id', id)
-            .eq('shop_id', shopData.id);
-
-        if (ownerProfile?.role === 'customer') {
-            orderQuery = orderQuery.eq('customer_auth_id', user.id);
-        }
-
-        const { data: orderData } = await orderQuery.single<OrderData>();
+            .eq('shop_id', shopData.id)
+            .eq('customer_auth_id', user.id)
+            .single<OrderData>();
 
         setOrder(orderData);
         setLastRefreshed(new Date());

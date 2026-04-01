@@ -1,8 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { toAppRole } from '@/lib/auth/context';
 
-const APP_ROLES = ['admin', 'shop_owner', 'customer'] as const;
-
-export type AppRole = (typeof APP_ROLES)[number];
+export type AppRole = 'admin' | 'shop_owner' | 'customer';
 
 interface ResolvePostLoginRedirectParams {
     supabase: SupabaseClient;
@@ -41,13 +40,6 @@ const normalizePreferredPath = (preferredPath?: string | null): string | null =>
     return decoded;
 };
 
-const toRole = (roleValue: string | null | undefined): AppRole => {
-    if (roleValue && APP_ROLES.includes(roleValue as AppRole)) {
-        return roleValue as AppRole;
-    }
-    return 'customer';
-};
-
 const resolveAdminTarget = (preferredPath: string | null) => {
     if (preferredPath?.startsWith('/admin')) return preferredPath;
     return '/admin';
@@ -84,7 +76,7 @@ export async function resolvePostLoginRedirect({
         .eq('id', userId)
         .maybeSingle<RoleRecord>();
 
-    const role = toRole(ownerData?.role);
+    const role = toAppRole(ownerData?.role);
 
     if (role === 'admin') {
         return {

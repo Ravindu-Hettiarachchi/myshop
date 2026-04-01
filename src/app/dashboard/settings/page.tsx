@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@/utils/supabase/client';
+import { useRouter } from 'next/navigation';
 import { Store, Palette, Type, Settings, ExternalLink, UploadCloud, X, ImageIcon } from 'lucide-react';
 import { buildStorefrontUrl } from '@/lib/storefront';
 import { uploadToShopAssets } from '@/lib/storage/shopAssets';
@@ -46,6 +47,7 @@ interface ShopSettings {
 
 export default function DashboardSettingsPage() {
     const supabase = createClient();
+    const router = useRouter();
     const [shop, setShop] = useState<ShopSettings | null>(null);
     const [form, setForm] = useState<Partial<ShopSettings>>({});
     const [loading, setLoading] = useState(true);
@@ -62,7 +64,21 @@ export default function DashboardSettingsPage() {
 
     const fetchShop = useCallback(async () => {
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        if (!user) {
+            router.replace('/login?next=/dashboard/settings');
+            return;
+        }
+
+        const { data: owner } = await supabase
+            .from('owners')
+            .select('role')
+            .eq('id', user.id)
+            .maybeSingle<{ role: string | null }>();
+
+        if (owner?.role !== 'shop_owner' && owner?.role !== 'admin') {
+            router.replace('/');
+            return;
+        }
 
         const [{ data }, { data: themesData }] = await Promise.all([
             supabase.from('shops').select('*').eq('owner_id', user.id).single(),
@@ -89,7 +105,7 @@ export default function DashboardSettingsPage() {
             });
         }
         setLoading(false);
-    }, [supabase]);
+    }, [supabase, router]);
 
     useEffect(() => {
         fetchShop();

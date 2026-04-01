@@ -1,4 +1,5 @@
-import { createClient } from '@/utils/supabase/server';
+import { createClient as createOwnerServerClient } from '@/utils/supabase/server';
+import { createCustomerServerClient } from '@/utils/supabase/customer-server';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import StorefrontClient from '@/components/shop/StorefrontClient';
@@ -10,10 +11,11 @@ interface Props {
 
 export default async function ShopPage({ params }: Props) {
     const { slug } = await params;
-    const supabase = await createClient();
+    const ownerSupabase = await createOwnerServerClient();
+    const customerSupabase = await createCustomerServerClient();
 
     // 1. Fetch the shop by route_path
-    const { data: shop, error: shopError } = await supabase
+    const { data: shop, error: shopError } = await ownerSupabase
         .from('shops')
         .select('*')
         .eq('route_path', slug)
@@ -24,15 +26,18 @@ export default async function ShopPage({ params }: Props) {
     }
 
     // 2. Fetch the full theme config row (needed to decide coded vs custom)
-    const { data: resolvedTheme } = await supabase
+    const { data: resolvedTheme } = await ownerSupabase
         .from('themes')
         .select('*')
         .eq('slug', shop.template)
         .maybeSingle();
 
-    // Check if the currently logged-in user is the owner of this shop
-    const { data: { user } } = await supabase.auth.getUser();
-    const isOwner = user?.id === shop.owner_id;
+    // Check owner preview context using owner session
+    const { data: { user: ownerUser } } = await ownerSupabase.auth.getUser();
+    const isOwner = ownerUser?.id === shop.owner_id;
+
+    // Customer storefront auth context (isolated cookie namespace)
+    const { data: { user: customerUser } } = await customerSupabase.auth.getUser();
 
     // Path-based storefront policy:
     // - Owner can preview an unapproved shop
@@ -42,7 +47,7 @@ export default async function ShopPage({ params }: Props) {
     }
 
     // Fetch products — both for approved shops (public) and for owner preview
-    const { data: products } = await supabase
+    const { data: products } = await ownerSupabase
         .from('products')
         .select('id, title, description, price, selling_unit_value, selling_unit, stock_quantity, stock_unit, image_urls, unit_value, unit')
         .eq('shop_id', shop.id)
@@ -97,11 +102,11 @@ export default async function ShopPage({ params }: Props) {
                 </div>
 
                 {/* Actual Storefront (fully rendered, just not public) */}
-                <StorefrontClient routePath={slug} shopConfig={shopConfig} productList={productList} sessionUserInit={user} themeConfig={resolvedTheme} />
+                <StorefrontClient routePath={slug} shopConfig={shopConfig} productList={productList} sessionUserInit={customerUser} themeConfig={resolvedTheme} />
             </div>
         );
     }
 
     // Fully live shop — render without any banner
-    return <StorefrontClient routePath={slug} shopConfig={shopConfig} productList={productList} sessionUserInit={user} themeConfig={resolvedTheme} />;
+    return <StorefrontClient routePath={slug} shopConfig={shopConfig} productList={productList} sessionUserInit={customerUser} themeConfig={resolvedTheme} />;
 }

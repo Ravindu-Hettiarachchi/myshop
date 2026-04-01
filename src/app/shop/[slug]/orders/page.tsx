@@ -1,8 +1,9 @@
 import Link from 'next/link';
-import { createClient } from '@/utils/supabase/server';
+import { createCustomerServerClient } from '@/utils/supabase/customer-server';
 import { redirect } from 'next/navigation';
 import { Package, Truck, CheckCircle, Clock, Receipt, ExternalLink } from 'lucide-react';
 import { formatQuantityLabel } from '@/lib/products';
+import { hasShopCustomerLink } from '@/lib/auth/context';
 
 interface OrdersPageProps {
     params: Promise<{ slug: string }>;
@@ -155,7 +156,7 @@ function OrderCard({ order, slug, isDelivered }: { order: CustomerOrder; slug: s
 
 export default async function CustomerOrdersPage({ params }: OrdersPageProps) {
     const { slug } = await params;
-    const supabase = await createClient();
+    const supabase = await createCustomerServerClient();
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
@@ -172,6 +173,15 @@ export default async function CustomerOrdersPage({ params }: OrdersPageProps) {
         return <div className="p-8 text-center">Store not found</div>;
     }
 
+    const isShopCustomer = await hasShopCustomerLink(supabase, {
+        shopId: shop.id,
+        userId: user.id,
+    });
+
+    if (!isShopCustomer) {
+        redirect(`/shop/${slug}`);
+    }
+
     const orderSelect = 'id, created_at, delivered_at, total_amount, payment_method, status, tracking_number, tracking_carrier, tracking_url, order_items(id, quantity, unit_price, ordered_quantity, ordered_unit, products(title, image_urls))';
 
     const { data: authLinkedOrders } = await supabase
@@ -182,20 +192,7 @@ export default async function CustomerOrdersPage({ params }: OrdersPageProps) {
         .order('created_at', { ascending: false })
         .returns<CustomerOrder[]>();
 
-    let allOrders = authLinkedOrders || [];
-
-    // Backward compatibility: older orders may be linked only by customer_email.
-    if (allOrders.length === 0 && user.email) {
-        const { data: emailLinkedOrders } = await supabase
-            .from('orders')
-            .select(orderSelect)
-            .eq('shop_id', shop.id)
-            .eq('customer_email', user.email)
-            .order('created_at', { ascending: false })
-            .returns<CustomerOrder[]>();
-
-        allOrders = emailLinkedOrders || [];
-    }
+    const allOrders = authLinkedOrders || [];
 
     const activeOrders = allOrders.filter((o) => ACTIVE_STATUSES.has(o.status));
     const deliveredOrders = allOrders.filter((o) => o.status === 'delivered');

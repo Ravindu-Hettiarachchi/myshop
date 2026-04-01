@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { CheckCircle2, ArrowRight, Receipt } from 'lucide-react';
-import { createClient } from '@/utils/supabase/server';
+import { createCustomerServerClient } from '@/utils/supabase/customer-server';
 
 interface SuccessPageProps {
     params: Promise<{ slug: string }>;
@@ -24,7 +24,8 @@ export default async function CheckoutSuccessPage({ params, searchParams }: Succ
     const { slug } = await params;
     const { orderId } = await searchParams;
 
-    const supabase = await createClient();
+    const supabase = await createCustomerServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
     const { data: shop } = await supabase
         .from('shops')
@@ -49,12 +50,17 @@ export default async function CheckoutSuccessPage({ params, searchParams }: Succ
     let order: OrderRecord | null = null;
 
     if (orderId) {
-        const { data: orderData } = await supabase
+        let orderQuery = supabase
             .from('orders')
             .select('id, customer_name, total_amount, payment_method')
             .eq('id', orderId)
-            .eq('shop_id', shop.id)
-            .maybeSingle<OrderRecord>();
+            .eq('shop_id', shop.id);
+
+        if (user?.id) {
+            orderQuery = orderQuery.eq('customer_auth_id', user.id);
+        }
+
+        const { data: orderData } = await orderQuery.maybeSingle<OrderRecord>();
 
         order = orderData;
     }

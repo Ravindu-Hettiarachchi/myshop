@@ -22,6 +22,7 @@ ALTER TABLE public.order_items ENABLE ROW LEVEL SECURITY;
 
 -- 4. RLS Policies for order_items
 -- Customers (Anonymous & Authenticated) can insert order items when creating an order
+DROP POLICY IF EXISTS "Anyone can insert order items" ON public.order_items;
 CREATE POLICY "Anyone can insert order items" 
 ON public.order_items FOR INSERT 
 TO anon, authenticated
@@ -29,12 +30,14 @@ WITH CHECK (true);
 
 -- Customers can view their own order items if they know the order ID (Assuming no direct customer row-link yet, 
 -- but normally linked via a session or token. In this loose model, anyone with the ID can view)
+DROP POLICY IF EXISTS "Public can view order items" ON public.order_items;
 CREATE POLICY "Public can view order items" 
 ON public.order_items FOR SELECT 
 TO anon, authenticated
 USING (true);
 
 -- Shop Owners can view all order items belonging to their shop's orders
+DROP POLICY IF EXISTS "Shop owners can manage their order items" ON public.order_items;
 CREATE POLICY "Shop owners can manage their order items" 
 ON public.order_items FOR ALL 
 TO authenticated 
@@ -47,7 +50,18 @@ USING (
 );
 
 -- 5. Force update the DB cache/realtime
-ALTER PUBLICATION supabase_realtime ADD TABLE order_items;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_publication_tables
+        WHERE pubname = 'supabase_realtime'
+          AND schemaname = 'public'
+          AND tablename = 'order_items'
+    ) THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.order_items;
+    END IF;
+END $$;
 
 -- 6. Add unit-aware quantity metadata for grocery-style mixed products
 ALTER TABLE public.order_items
@@ -164,4 +178,15 @@ TO authenticated
 USING (auth_user_id = auth.uid())
 WITH CHECK (auth_user_id = auth.uid());
 
-ALTER PUBLICATION supabase_realtime ADD TABLE shop_customers;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_publication_tables
+        WHERE pubname = 'supabase_realtime'
+          AND schemaname = 'public'
+          AND tablename = 'shop_customers'
+    ) THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.shop_customers;
+    END IF;
+END $$;

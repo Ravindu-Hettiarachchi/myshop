@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { createClient } from '@/utils/supabase/client';
+import { createCustomerClient } from '@/utils/supabase/customer-client';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ShoppingBag, Loader2 } from 'lucide-react';
@@ -21,7 +21,7 @@ async function ensureShopCustomerLink(args: {
     email: string;
     fullName?: string | null;
 }) {
-    const supabase = createClient();
+    const supabase = createCustomerClient();
     const { data: shop } = await supabase
         .from('shops')
         .select('id')
@@ -51,7 +51,7 @@ export default function CustomerLogin({ params }: { params: Promise<{ slug: stri
     const { slug } = React.use(params);
     const router = useRouter();
     const searchParams = useSearchParams();
-    const supabase = createClient();
+    const supabase = createCustomerClient();
     const [isLoading, setIsLoading] = useState(false);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');

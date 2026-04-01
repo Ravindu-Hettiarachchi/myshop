@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/utils/supabase/client';
+import { createCustomerClient } from '@/utils/supabase/customer-client';
 import { Loader2, ArrowLeft, CreditCard, Wallet, MapPin, Truck, AlertCircle } from 'lucide-react';
 import type { User } from '@supabase/supabase-js';
 import { formatPriceWithUnit, formatQuantityLabel, type ProductUnit } from '@/lib/products';
@@ -40,7 +40,7 @@ type Fields = 'fullName' | 'address' | 'city' | 'postalCode';
 
 export default function CheckoutClient({ shop }: { shop: ShopData }) {
     const router = useRouter();
-    const supabase = createClient();
+    const supabase = createCustomerClient();
 
     const [cart, setCart] = useState<CartItem[]>([]);
     const [customerEmail, setCustomerEmail] = useState('');

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ShoppingCart, X, Loader2 } from 'lucide-react';
-import { createClient } from '@/utils/supabase/client';
+import { createCustomerClient } from '@/utils/supabase/customer-client';
 import { getThemeComponent, isThemeDark } from '@/lib/themes';
 import DynamicTheme, { type DynamicThemeConfig } from '@/components/storefronts/DynamicTheme';
 import { formatPriceWithUnit, formatQuantityLabel, normalizeSellingUnit, normalizeStockUnit, normalizeUnitValue, type ProductUnit } from '@/lib/products';
@@ -77,12 +77,13 @@ interface Props {
 
 export default function StorefrontClient({ routePath, shopConfig, productList, sessionUserInit, themeConfig }: Props) {
     const router = useRouter();
-    const supabase = createClient();
+    const supabase = createCustomerClient();
 
     const [cart, setCart] = useState<CartItem[]>([]);
     const [isCartOpen, setIsCartOpen] = useState(false);
     const [isCheckingOut, setIsCheckingOut] = useState(false);
     const [sessionUser, setSessionUser] = useState<User | null>(sessionUserInit);
+    const [isStorefrontCustomer, setIsStorefrontCustomer] = useState(false);
     const [productPicker, setProductPicker] = useState<{ product: Product; quantityMultiplier: number } | null>(null);
 
     // Initial mapping of products from backend format to Cart format
@@ -114,13 +115,26 @@ export default function StorefrontClient({ routePath, shopConfig, productList, s
     useEffect(() => {
         const fetchStoreData = async () => {
             const { data: { session } } = await supabase.auth.getSession();
-            if (session?.user) {
-                setSessionUser(session.user);
+            const user = session?.user ?? null;
+            setSessionUser(user);
+
+            if (!user) {
+                setIsStorefrontCustomer(false);
+                return;
             }
+
+            const { data: customerLink } = await supabase
+                .from('shop_customers')
+                .select('id')
+                .eq('shop_id', shopConfig.id)
+                .eq('auth_user_id', user.id)
+                .maybeSingle<{ id: string }>();
+
+            setIsStorefrontCustomer(Boolean(customerLink?.id));
         };
         fetchStoreData();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [shopConfig.id]);
 
     const openProductPicker = (productInput: unknown) => {
         if (!isCartProduct(productInput)) return;
@@ -201,6 +215,12 @@ export default function StorefrontClient({ routePath, shopConfig, productList, s
             return;
         }
 
+        if (!isStorefrontCustomer) {
+            alert('This account is not linked as a customer for this shop.');
+            router.push(`/shop/${routePath}`);
+            return;
+        }
+
         if (!shopConfig || cart.length === 0) return;
 
         // Save cart state to local storage to be read by the checkout page
@@ -218,11 +238,13 @@ export default function StorefrontClient({ routePath, shopConfig, productList, s
     const handleLogout = async () => {
         await supabase.auth.signOut();
         setSessionUser(null);
+        setIsStorefrontCustomer(false);
         router.push(`/shop/${routePath}`);
         router.refresh();
     };
 
     const customerDisplayName = sessionUser?.user_metadata?.full_name || sessionUser?.email?.split('@')[0] || 'Account';
+    const customerSessionUser = isStorefrontCustomer ? sessionUser : null;
 
     // Render Logic — custom DB-driven theme OR coded registry theme
     const renderTemplate = () => {
@@ -246,7 +268,7 @@ export default function StorefrontClient({ routePath, shopConfig, productList, s
                     onAddToCart={openProductPicker}
                     onOpenCart={() => setIsCartOpen(true)}
                     cartCount={cartCount}
-                    sessionUser={sessionUser}
+                    sessionUser={customerSessionUser}
                     customerDisplayName={customerDisplayName}
                     onLogout={handleLogout}
                     themeConfig={dynamicCfg}
@@ -263,7 +285,7 @@ export default function StorefrontClient({ routePath, shopConfig, productList, s
                 onAddToCart={openProductPicker}
                 onOpenCart={() => setIsCartOpen(true)}
                 cartCount={cartCount}
-                sessionUser={sessionUser}
+                sessionUser={customerSessionUser}
                 customerDisplayName={customerDisplayName}
                 onLogout={handleLogout}
             />
@@ -354,7 +376,7 @@ export default function StorefrontClient({ routePath, shopConfig, productList, s
                                         <span className={`font-bold ${theme.text}`}>රු {cartTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                     </div>
 
-                                    {sessionUser ? (
+                                    {customerSessionUser ? (
                                         <form onSubmit={handleCheckout} className="space-y-4">
                                             <button
                                                 type="submit"

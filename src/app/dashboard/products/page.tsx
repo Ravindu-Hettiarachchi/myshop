@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@/utils/supabase/client';
+import { useRouter } from 'next/navigation';
 import { PackageSearch, Plus, Search, AlertTriangle, Edit, Trash2, CheckCircle2, X, Loader2, UploadCloud, Image } from 'lucide-react';
 import { uploadToShopAssets } from '@/lib/storage/shopAssets';
 import {
@@ -46,6 +47,7 @@ interface ProductFormState {
 
 export default function ProductsDashboard() {
     const supabase = createClient();
+    const router = useRouter();
     const [products, setProducts] = useState<ProductRecord[]>([]);
     const [shopId, setShopId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
@@ -67,7 +69,24 @@ export default function ProductsDashboard() {
         async function fetch() {
             setLoading(true);
             const { data: { user } } = await supabase.auth.getUser();
-            if (!user) { setLoading(false); return; }
+            if (!user) {
+                router.replace('/login?next=/dashboard/products');
+                setLoading(false);
+                return;
+            }
+
+            const { data: owner } = await supabase
+                .from('owners')
+                .select('role')
+                .eq('id', user.id)
+                .maybeSingle<{ role: string | null }>();
+
+            if (owner?.role !== 'shop_owner' && owner?.role !== 'admin') {
+                router.replace('/');
+                setLoading(false);
+                return;
+            }
+
             const { data: shop } = await supabase.from('shops').select('id').eq('owner_id', user.id).single();
             if (shop) {
                 setShopId(shop.id);
@@ -84,7 +103,7 @@ export default function ProductsDashboard() {
             setLoading(false);
         }
         fetch();
-    }, [supabase]);
+    }, [supabase, router]);
 
     const filteredProducts = products.filter(p => p.title.toLowerCase().includes(search.toLowerCase()));
 

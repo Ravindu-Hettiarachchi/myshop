@@ -1,19 +1,29 @@
-import { createClient } from '@/utils/supabase/server';
+import { createCustomerServerClient } from '@/utils/supabase/customer-server';
 import Link from 'next/link';
 import { Package, UserCircle } from 'lucide-react';
 import { redirect } from 'next/navigation';
 import { LogoutButton } from '@/components/shop/AccountClient';
 import CustomerOrdersClient from '@/components/shop/CustomerOrdersClient';
+import { hasShopCustomerLink } from '@/lib/auth/context';
 
 export default async function CustomerAccountPage({ params }: { params: Promise<{ slug: string }> }) {
     const { slug } = await params;
-    const supabase = await createClient();
+    const supabase = await createCustomerServerClient();
 
     const { data: shop } = await supabase.from('shops').select('*').eq('route_path', slug).single();
     if (!shop) return <div className="p-8 text-center">Store not found</div>;
 
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) redirect(`/shop/${slug}/login`);
+
+    const isShopCustomer = await hasShopCustomerLink(supabase, {
+        shopId: shop.id,
+        userId: session.user.id,
+    });
+
+    if (!isShopCustomer) {
+        redirect(`/shop/${slug}`);
+    }
 
     const { data: orders } = await supabase
         .from('orders')

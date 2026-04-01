@@ -1,12 +1,12 @@
 'use client';
 
-import { createClient } from '@/utils/supabase/client';
+import { createCustomerClient } from '@/utils/supabase/customer-client';
 import { useRouter } from 'next/navigation';
 import { LogOut, Loader2, XCircle } from 'lucide-react';
 import { useState } from 'react';
 
 export function LogoutButton({ slug }: { slug: string }) {
-    const supabase = createClient();
+    const supabase = createCustomerClient();
     const router = useRouter();
     const [isLoggingOut, setIsLoggingOut] = useState(false);
 
@@ -30,7 +30,7 @@ export function LogoutButton({ slug }: { slug: string }) {
 }
 
 export function CancelOrderButton({ orderId, onCancelled }: { orderId: string; onCancelled: () => void }) {
-    const supabase = createClient();
+    const supabase = createCustomerClient();
     const [isCancelling, setIsCancelling] = useState(false);
 
     const handleCancel = async () => {
@@ -43,8 +43,9 @@ export function CancelOrderButton({ orderId, onCancelled }: { orderId: string; o
                 .eq('id', orderId);
             if (error) throw error;
             onCancelled();
-        } catch (err: any) {
-            alert(`Failed to cancel order: ${err.message}`);
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'Unknown error';
+            alert(`Failed to cancel order: ${message}`);
         } finally {
             setIsCancelling(false);
         }

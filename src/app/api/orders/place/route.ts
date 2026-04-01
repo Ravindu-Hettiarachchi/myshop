@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/utils/supabase/server';
+import { createCustomerServerClient } from '@/utils/supabase/customer-server';
 import { convertQuantity, normalizeStockUnit, normalizeSellingUnit, type ProductUnit } from '@/lib/products';
+import { hasShopCustomerLink } from '@/lib/auth/context';
 
 interface PlaceOrderItem {
     id: string;
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Invalid order payload.' }, { status: 400 });
         }
 
-        const supabase = await createClient();
+    const supabase = await createCustomerServerClient();
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
             return NextResponse.json({ error: 'Authentication required to place an order.' }, { status: 401 });
@@ -56,24 +57,23 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Shop not found.' }, { status: 404 });
         }
 
-        let shopCustomerId: string | null = null;
-        const upsertShopCustomer = await supabase
-            .from('shop_customers')
-            .upsert(
-                {
-                    shop_id: shop.id,
-                    auth_user_id: user.id,
-                    email: user.email || body.customer.email,
-                    full_name: body.customer.fullName,
-                },
-                { onConflict: 'shop_id,auth_user_id' }
-            )
-            .select('id')
-            .single<{ id: string }>();
+        const isShopCustomer = await hasShopCustomerLink(supabase, {
+            shopId: shop.id,
+            userId: user.id,
+        });
 
-        if (!upsertShopCustomer.error) {
-            shopCustomerId = upsertShopCustomer.data?.id ?? null;
+        if (!isShopCustomer) {
+            return NextResponse.json({ error: 'Customer account not linked to this shop.' }, { status: 403 });
         }
+
+        const { data: shopCustomer } = await supabase
+            .from('shop_customers')
+            .select('id')
+            .eq('shop_id', shop.id)
+            .eq('auth_user_id', user.id)
+            .maybeSingle<{ id: string }>();
+
+        const shopCustomerId = shopCustomer?.id ?? null;
 
         const productIds = body.items.map((i) => i.id);
         const { data: products, error: productError } = await supabase

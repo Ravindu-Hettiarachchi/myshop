@@ -2,9 +2,10 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { LayoutDashboard, Store, Users, CreditCard, LogOut, Paintbrush, ShieldAlert } from 'lucide-react';
 import PlatformLogo from '@/components/PlatformLogo';
+import { createClient } from '@/utils/supabase/client';
 
 const NAV = [
     { href: '/admin', label: 'Overview', icon: LayoutDashboard },
@@ -15,7 +16,62 @@ const NAV = [
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
+    const supabase = createClient();
+    const router = useRouter();
     const pathname = usePathname();
+    const [isAuthorized, setIsAuthorized] = React.useState(false);
+    const [authChecked, setAuthChecked] = React.useState(false);
+
+    React.useEffect(() => {
+        const load = async () => {
+            setIsAuthorized(false);
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                router.replace('/login?next=/admin');
+                setAuthChecked(true);
+                return;
+            }
+
+            const { data: owner } = await supabase
+                .from('owners')
+                .select('role')
+                .eq('id', user.id)
+                .maybeSingle<{ role: string | null }>();
+
+            if (owner?.role !== 'admin') {
+                router.replace('/dashboard');
+                setAuthChecked(true);
+                return;
+            }
+
+            setIsAuthorized(true);
+            setAuthChecked(true);
+        };
+
+        load();
+
+        const { data: authListener } = supabase.auth.onAuthStateChange(() => {
+            load();
+        });
+
+        return () => {
+            authListener.subscription.unsubscribe();
+        };
+    }, [router, supabase]);
+
+    const handleSignOut = async () => {
+        await supabase.auth.signOut();
+        router.push('/login');
+        router.refresh();
+    };
+
+    if (!authChecked || !isAuthorized) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-950">
+                <div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin" />
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-gray-950 flex font-sans">
@@ -67,9 +123,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                             <p className="text-xs font-semibold text-white truncate">System Admin</p>
                             <p className="text-xs text-gray-500 truncate">Master Access</p>
                         </div>
-                        <Link href="/login" className="text-gray-600 hover:text-red-400 transition flex-shrink-0" title="Sign Out">
+                        <button onClick={handleSignOut} className="text-gray-600 hover:text-red-400 transition flex-shrink-0" title="Sign Out">
                             <LogOut className="w-3.5 h-3.5" />
-                        </Link>
+                        </button>
                     </div>
                 </div>
             </aside>
@@ -82,9 +138,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                         <ShieldAlert className="w-4 h-4 text-white/80" />
                         <span className="text-white font-bold text-sm">Admin Panel</span>
                     </div>
-                    <Link href="/login" className="text-red-200 hover:text-white transition">
+                    <button onClick={handleSignOut} className="text-red-200 hover:text-white transition">
                         <LogOut className="w-4 h-4" />
-                    </Link>
+                    </button>
                 </header>
 
                 <div className="flex-1 overflow-auto bg-gray-950">

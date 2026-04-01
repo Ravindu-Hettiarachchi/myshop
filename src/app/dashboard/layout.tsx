@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useParams, usePathname } from 'next/navigation';
+import { useParams, usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { LayoutDashboard, Palette, Package as PackageIcon, LogOut, ShoppingBag, ExternalLink, ChevronRight } from 'lucide-react';
 import PlatformLogo from '@/components/PlatformLogo';
@@ -10,21 +10,38 @@ import { buildStorefrontUrl } from '@/lib/storefront';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
     const supabase = createClient();
+    const router = useRouter();
     const pathname = usePathname();
     const params = useParams<{ shopSlug?: string }>();
     const [displayName, setDisplayName] = useState('...');
     const [shopName, setShopName] = useState('');
     const [routePath, setRoutePath] = useState('');
+    const [isAuthorized, setIsAuthorized] = useState(false);
+    const [authChecked, setAuthChecked] = useState(false);
 
     useEffect(() => {
         const load = async () => {
+            setIsAuthorized(false);
             const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return;
+            if (!user) {
+                router.replace(`/login?next=${encodeURIComponent(pathname || '/dashboard')}`);
+                setAuthChecked(true);
+                return;
+            }
+
             const { data: owner } = await supabase
                 .from('owners')
-                .select('full_name')
+                .select('full_name, role')
                 .eq('id', user.id)
-                .maybeSingle();
+                .maybeSingle<{ full_name: string | null; role: string | null }>();
+
+            const role = owner?.role;
+            const allowed = role === 'shop_owner' || role === 'admin';
+            if (!allowed) {
+                router.replace('/');
+                setAuthChecked(true);
+                return;
+            }
 
             let shopQuery = supabase
                 .from('shops')
@@ -41,9 +58,28 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             setDisplayName(owner?.full_name || user.email?.split('@')[0] || 'Shop Owner');
             setShopName(shop?.shop_name || '');
             setRoutePath(shop?.route_path || '');
+            setIsAuthorized(true);
+            setAuthChecked(true);
         };
+
         load();
-    }, [params?.shopSlug, supabase]);
+
+        const { data: authListener } = supabase.auth.onAuthStateChange(() => {
+            load();
+        });
+
+        return () => {
+            authListener.subscription.unsubscribe();
+        };
+    }, [params?.shopSlug, supabase, router, pathname]);
+
+    if (!authChecked || !isAuthorized) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-slate-50">
+                <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            </div>
+        );
+    }
 
     const handleSignOut = async () => {
         await supabase.auth.signOut();

@@ -1,9 +1,10 @@
-import { createClient } from '@/utils/supabase/server';
+import { createCustomerServerClient } from '@/utils/supabase/customer-server';
 import { notFound, redirect } from 'next/navigation';
 import { MapPin, Phone, Mail, FileText, Truck } from 'lucide-react';
 import Link from 'next/link';
 import PrintButton from './PrintButton';
 import { formatPriceWithUnit, formatQuantityLabel } from '@/lib/products';
+import { hasShopCustomerLink } from '@/lib/auth/context';
 
 export const revalidate = 0;
 
@@ -53,7 +54,7 @@ interface InvoiceOrder {
 
 export default async function InvoicePage({ params }: { params: Promise<{ slug: string; id: string }> }) {
     const { slug, id } = await params;
-    const supabase = await createClient();
+    const supabase = await createCustomerServerClient();
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
@@ -69,14 +70,18 @@ export default async function InvoicePage({ params }: { params: Promise<{ slug: 
 
     if (shopError || !shop) notFound();
 
-    // 2. Fetch Order + Items
-    const { data: ownerProfile } = await supabase
-        .from('owners')
-        .select('role')
-        .eq('id', user.id)
-        .maybeSingle<{ role?: string | null }>();
+    const isShopCustomer = await hasShopCustomerLink(supabase, {
+        shopId: shop.id,
+        userId: user.id,
+    });
 
-    let orderQuery = supabase
+    if (!isShopCustomer) {
+        redirect(`/shop/${slug}`);
+    }
+
+    // 2. Fetch Order + Items
+
+    const { data: order, error: orderError } = await supabase
         .from('orders')
         .select(`
             *,
@@ -86,13 +91,9 @@ export default async function InvoicePage({ params }: { params: Promise<{ slug: 
             )
         `)
         .eq('id', id)
-        .eq('shop_id', shop.id);
-
-    if (ownerProfile?.role === 'customer') {
-        orderQuery = orderQuery.eq('customer_auth_id', user.id);
-    }
-
-    const { data: order, error: orderError } = await orderQuery.maybeSingle<InvoiceOrder>();
+        .eq('shop_id', shop.id)
+        .eq('customer_auth_id', user.id)
+        .maybeSingle<InvoiceOrder>();
 
     if (orderError || !order) {
         return (
