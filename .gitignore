@@ -40,3 +40,14 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 backend/node_modules/
+node_modules/
+.backend/
+.frontend/
+.next/
+dist/
+build/
+.env
+.env.local
+*.log
+server_log.txt
+.DS_Store

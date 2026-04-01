@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@/utils/supabase/client';
-import { PackageSearch, Plus, Search, AlertTriangle, Edit, Trash2, CheckCircle2, X, Loader2 } from 'lucide-react';
+import { PackageSearch, Plus, Search, AlertTriangle, Edit, Trash2, CheckCircle2, X, Loader2, UploadCloud, ImageIcon, Image } from 'lucide-react';
 
 export default function ProductsDashboard() {
     const supabase = createClient();
@@ -14,9 +14,12 @@ export default function ProductsDashboard() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingProduct, setEditingProduct] = useState<any | null>(null);
     const [isSaving, setIsSaving] = useState(false);
+    const [isUploading, setIsUploading] = useState(false);
     const [formData, setFormData] = useState({
         title: '', description: '', price: '', stock_quantity: 0, low_stock_threshold: 5, image_urls: [] as string[]
     });
+
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         async function fetch() {
@@ -46,6 +49,39 @@ export default function ProductsDashboard() {
     };
 
     const closeModal = () => { setIsModalOpen(false); setEditingProduct(null); };
+
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !shopId) return;
+
+        setIsUploading(true);
+        try {
+            const fileExt = file.name.split('.').pop();
+            const fileName = `product-${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
+            const filePath = `${shopId}/products/${fileName}`;
+
+            const { error: uploadError } = await supabase.storage
+                .from('shop-assets')
+                .upload(filePath, file, { upsert: true });
+
+            if (uploadError) throw uploadError;
+
+            const { data: { publicUrl } } = supabase.storage
+                .from('shop-assets')
+                .getPublicUrl(filePath);
+
+            setFormData(prev => ({ ...prev, image_urls: [publicUrl, ...prev.image_urls.filter(u => u !== publicUrl)] }));
+        } catch (err: any) {
+            alert(`Upload failed: ${err.message}. Ensure the 'shop-assets' bucket is configured in Supabase.`);
+        } finally {
+            setIsUploading(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+    };
+
+    const removeImage = (url: string) => {
+        setFormData(prev => ({ ...prev, image_urls: prev.image_urls.filter(u => u !== url) }));
+    };
 
     const handleSave = async () => {
         if (!shopId) return;
@@ -183,11 +219,23 @@ export default function ProductsDashboard() {
                                             {/* Product */}
                                             <td className="px-5 py-4">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="w-11 h-11 bg-gray-100 rounded-xl flex-shrink-0 overflow-hidden">
-                                                        {product.image_urls?.[0]
-                                                            ? <img src={product.image_urls[0]} alt={product.title} className="w-full h-full object-cover" />
-                                                            : <PackageSearch className="w-5 h-5 text-gray-300 m-auto mt-3" />
-                                                        }
+                                                    <div className="w-11 h-11 bg-gray-100 rounded-xl flex-shrink-0 overflow-hidden border border-gray-100">
+                                                        {product.image_urls?.[0] ? (
+                                                            <img
+                                                                src={product.image_urls[0]}
+                                                                alt={product.title}
+                                                                className="w-full h-full object-cover"
+                                                                onError={(e) => {
+                                                                    const target = e.target as HTMLImageElement;
+                                                                    target.style.display = 'none';
+                                                                    target.parentElement!.classList.add('flex', 'items-center', 'justify-center');
+                                                                }}
+                                                            />
+                                                        ) : (
+                                                            <div className="w-full h-full flex items-center justify-center">
+                                                                <Image className="w-5 h-5 text-gray-300" />
+                                                            </div>
+                                                        )}
                                                     </div>
                                                     <div>
                                                         <p className="font-semibold text-gray-900 text-sm leading-none mb-0.5">{product.title}</p>
@@ -256,8 +304,8 @@ export default function ProductsDashboard() {
 
             {/* Modal */}
             {isModalOpen && (
-                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
                         {/* Modal Header */}
                         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                             <div>
@@ -270,7 +318,98 @@ export default function ProductsDashboard() {
                         </div>
 
                         {/* Modal Body */}
-                        <div className="p-6 overflow-y-auto flex-1 space-y-4">
+                        <div className="p-6 overflow-y-auto flex-1 space-y-5">
+
+                            {/* Image Upload Section */}
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Product Images</label>
+
+                                {/* Upload Area */}
+                                <div
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="w-full h-28 border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-all group"
+                                >
+                                    {isUploading ? (
+                                        <>
+                                            <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
+                                            <span className="text-xs text-blue-500 font-medium">Uploading...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <UploadCloud className="w-6 h-6 text-gray-300 group-hover:text-blue-400 transition" />
+                                            <span className="text-xs text-gray-400 group-hover:text-blue-500 font-medium transition">Click to upload image</span>
+                                            <span className="text-[10px] text-gray-300">PNG, JPG, WEBP up to 5MB</span>
+                                        </>
+                                    )}
+                                </div>
+                                <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept="image/png,image/jpeg,image/webp,image/gif"
+                                    className="hidden"
+                                    onChange={handleImageUpload}
+                                    disabled={isUploading}
+                                />
+
+                                {/* Image Previews */}
+                                {formData.image_urls.length > 0 && (
+                                    <div className="mt-3 flex flex-wrap gap-2">
+                                        {formData.image_urls.map((url, idx) => (
+                                            <div key={idx} className="relative w-16 h-16 rounded-xl overflow-hidden border border-gray-100 group/img shadow-sm">
+                                                <img
+                                                    src={url}
+                                                    alt={`Product image ${idx + 1}`}
+                                                    className="w-full h-full object-cover"
+                                                    onError={(e) => {
+                                                        const target = e.target as HTMLImageElement;
+                                                        target.src = '';
+                                                        target.parentElement!.style.backgroundColor = '#f3f4f6';
+                                                    }}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeImage(url)}
+                                                    className="absolute top-1 right-1 w-5 h-5 bg-black/70 rounded-full flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity"
+                                                >
+                                                    <X className="w-3 h-3 text-white" />
+                                                </button>
+                                                {idx === 0 && (
+                                                    <div className="absolute bottom-0 left-0 right-0 bg-blue-600 text-white text-[9px] text-center font-bold py-0.5">MAIN</div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {/* Or URL input */}
+                                <div className="mt-3">
+                                    <p className="text-xs text-gray-400 mb-1.5">Or paste image URL:</p>
+                                    <input
+                                        type="url"
+                                        placeholder="https://example.com/image.jpg"
+                                        className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                const val = (e.target as HTMLInputElement).value.trim();
+                                                if (val) {
+                                                    setFormData(prev => ({ ...prev, image_urls: [...prev.image_urls, val] }));
+                                                    (e.target as HTMLInputElement).value = '';
+                                                }
+                                            }
+                                        }}
+                                        onBlur={(e) => {
+                                            const val = e.target.value.trim();
+                                            if (val) {
+                                                setFormData(prev => ({ ...prev, image_urls: [...prev.image_urls, val] }));
+                                                e.target.value = '';
+                                            }
+                                        }}
+                                    />
+                                    <p className="text-[10px] text-gray-300 mt-1">Press Enter or click away to add URL</p>
+                                </div>
+                            </div>
+
                             <div>
                                 <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">Product Title *</label>
                                 <input type="text" required value={formData.title}
@@ -314,14 +453,6 @@ export default function ProductsDashboard() {
                                     className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 transition"
                                     placeholder="5" />
                             </div>
-
-                            <div>
-                                <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">Image URL</label>
-                                <input type="url" value={formData.image_urls[0] || ''}
-                                    onChange={e => setFormData({ ...formData, image_urls: [e.target.value] })}
-                                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
-                                    placeholder="https://..." />
-                            </div>
                         </div>
 
                         {/* Modal Footer */}
@@ -329,7 +460,7 @@ export default function ProductsDashboard() {
                             <button onClick={closeModal} className="px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-500 hover:bg-gray-100 transition">
                                 Cancel
                             </button>
-                            <button onClick={handleSave} disabled={isSaving}
+                            <button onClick={handleSave} disabled={isSaving || isUploading}
                                 className="px-5 py-2.5 rounded-xl text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 transition flex items-center gap-2">
                                 {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                                 {editingProduct ? 'Save Changes' : 'Add Product'}
