@@ -11,6 +11,7 @@ interface Product {
     selling_unit: ProductUnit;
     stock_quantity: number;
     image_urls: string[] | null;
+    compare_at_price?: number | null;
 }
 
 interface ShopConfig {
@@ -38,8 +39,11 @@ interface Props {
 
 export default function ElegantBoutique({ shop, products, onAddToCart, cartCount = 0, onOpenCart, sessionUser, customerDisplayName, onLogout }: Props) {
     const primaryColor = shop.primary_color || '#7C3AED';
-    const featured = products.slice(0, 3);
-    const rest = products.slice(3);
+    const saleItems = products.filter(p => p.compare_at_price != null && p.compare_at_price > p.price);
+    const saleFeatured = saleItems.slice(0, 3);
+    const nonSaleProducts = products.filter(p => p.compare_at_price == null || p.compare_at_price <= p.price);
+    const featured = nonSaleProducts.slice(0, 3);
+    const rest = nonSaleProducts.slice(3);
 
     return (
         <div style={{ fontFamily: `'Cormorant Garamond', 'Playfair Display', '${shop.font}', serif` }} className="min-h-screen bg-[#FBF9F7] text-stone-900">
@@ -175,6 +179,63 @@ export default function ElegantBoutique({ shop, products, onAddToCart, cartCount
                 </div>
             </section>
 
+            {/* Exclusive Archives / Sale */}
+            {saleFeatured.length > 0 && (
+                <section id="sale" className="max-w-7xl mx-auto px-5 lg:px-10 py-20 bg-stone-900/5 mt-10 rounded-2xl">
+                    <div className="text-center mb-14">
+                        <p style={{ color: primaryColor }} className="text-xs tracking-[0.3em] uppercase font-sans font-medium mb-3">Limited Archives</p>
+                        <h2 className="text-3xl font-light tracking-wide text-stone-900">The Sale Event</h2>
+                        <div style={{ backgroundColor: primaryColor }} className="w-10 h-px mx-auto mt-5" />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-10">
+                        {saleFeatured.map((product) => {
+                            const discountPercent = Math.round(((product.compare_at_price! - product.price) / product.compare_at_price!) * 100);
+                            return (
+                                <div key={product.id} onClick={() => onAddToCart?.(product)} className="group cursor-pointer">
+                                    <div className="aspect-[3/4] bg-white overflow-hidden mb-5 relative border border-stone-200">
+                                        {/* Elegant Badge */}
+                                        <div className="absolute top-4 right-4 z-10 bg-stone-900 text-stone-100 text-[10px] uppercase font-sans tracking-[0.2em] px-3 py-1.5">
+                                            {discountPercent}% OFF
+                                        </div>
+
+                                        {product.image_urls?.[0] ? (
+                                            <img src={product.image_urls[0]} alt={product.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-95 group-hover:opacity-100" />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center">
+                                                <ShoppingBag className="w-10 h-10 text-stone-200" strokeWidth={1} />
+                                            </div>
+                                        )}
+                                        {product.stock_quantity === 0 && (
+                                            <div className="absolute inset-0 bg-stone-50/80 flex items-center justify-center z-10">
+                                                <span className="text-xs font-sans uppercase tracking-widest text-stone-400">Sold Out</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="text-center">
+                                        <p className="font-medium tracking-wide text-stone-900 text-sm mb-1 font-sans">{product.title}</p>
+                                        {product.description && <p className="text-xs text-stone-400 mb-4 line-clamp-2 font-sans font-light leading-relaxed">{product.description}</p>}
+                                        <div className="flex items-center justify-center gap-3 mb-4 font-sans text-sm tracking-wide">
+                                            <p className="text-stone-400 line-through">Rs. {Number(product.compare_at_price).toLocaleString()}</p>
+                                            <p style={{ color: primaryColor }} className="font-medium">{formatPriceWithUnit(product.price, product.selling_unit, product.selling_unit_value)}</p>
+                                        </div>
+                                        {product.stock_quantity > 0 ? (
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); onAddToCart?.(product); }}
+                                                className="bg-stone-900 border border-stone-900 text-stone-100 text-xs px-6 py-2.5 uppercase tracking-[0.15em] hover:bg-stone-800 hover:border-stone-800 transition-all font-sans font-medium hover:shadow-lg"
+                                            >
+                                                Add to Bag
+                                            </button>
+                                        ) : (
+                                            <span className="text-xs text-stone-300 uppercase tracking-widest font-sans">Sold Out</span>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </section>
+            )}
+
             {/* Featured Products */}
             {featured.length > 0 && (
                 <section id="products" className="max-w-7xl mx-auto px-5 lg:px-10 py-20">
@@ -185,7 +246,7 @@ export default function ElegantBoutique({ shop, products, onAddToCart, cartCount
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-10">
                         {featured.map((product) => (
-                            <div key={product.id} className="group">
+                            <div key={product.id} onClick={() => onAddToCart?.(product)} className="group cursor-pointer">
                                 <div className="aspect-[3/4] bg-stone-100 overflow-hidden mb-5 relative">
                                     {product.image_urls?.[0] ? (
                                         <img src={product.image_urls[0]} alt={product.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
@@ -203,10 +264,15 @@ export default function ElegantBoutique({ shop, products, onAddToCart, cartCount
                                 <div className="text-center">
                                     <p className="font-medium tracking-wide text-stone-900 text-sm mb-1 font-sans">{product.title}</p>
                                     {product.description && <p className="text-xs text-stone-400 mb-4 line-clamp-2 font-sans font-light leading-relaxed">{product.description}</p>}
-                                    <p style={{ color: primaryColor }} className="text-sm font-medium mb-4 tracking-wide font-sans">{formatPriceWithUnit(product.price, product.selling_unit, product.selling_unit_value)}</p>
+                                    <div className="flex items-center justify-center gap-3 mb-4 font-sans text-sm tracking-wide">
+                                        {product.compare_at_price != null && product.compare_at_price > product.price && (
+                                            <p className="text-stone-400 line-through">Rs. {Number(product.compare_at_price).toLocaleString()}</p>
+                                        )}
+                                        <p style={{ color: primaryColor }} className="font-medium">{formatPriceWithUnit(product.price, product.selling_unit, product.selling_unit_value)}</p>
+                                    </div>
                                     {product.stock_quantity > 0 ? (
                                         <button
-                                            onClick={() => onAddToCart?.(product)}
+                                            onClick={(e) => { e.stopPropagation(); onAddToCart?.(product); }}
                                             style={{ borderColor: primaryColor, color: primaryColor }}
                                             className="border text-xs px-6 py-2.5 uppercase tracking-[0.15em] hover:bg-stone-900 hover:text-white hover:border-stone-900 transition-all font-sans font-medium"
                                         >
@@ -247,7 +313,7 @@ export default function ElegantBoutique({ shop, products, onAddToCart, cartCount
                     <h2 className="text-2xl font-light tracking-wide text-stone-900 mb-12 text-center">Full Catalogue</h2>
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-8">
                         {rest.map((product) => (
-                            <div key={product.id} className="group">
+                            <div key={product.id} onClick={() => onAddToCart?.(product)} className="group cursor-pointer">
                                 <div className="aspect-[3/4] bg-stone-100 overflow-hidden mb-4 relative">
                                     {product.image_urls?.[0] ? (
                                         <img src={product.image_urls[0]} alt={product.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
@@ -264,10 +330,15 @@ export default function ElegantBoutique({ shop, products, onAddToCart, cartCount
                                 </div>
                                 <p className="font-medium tracking-wide text-stone-900 text-sm mb-1 font-sans truncate">{product.title}</p>
                                 <div className="flex items-center justify-between">
-                                    <p style={{ color: primaryColor }} className="text-sm font-medium font-sans">{formatPriceWithUnit(product.price, product.selling_unit, product.selling_unit_value)}</p>
+                                    <div className="flex flex-col gap-0.5">
+                                        {product.compare_at_price != null && product.compare_at_price > product.price && (
+                                            <p className="text-[10px] text-stone-400 line-through">Rs. {Number(product.compare_at_price).toLocaleString()}</p>
+                                        )}
+                                        <p style={{ color: primaryColor }} className="text-sm font-medium font-sans">{formatPriceWithUnit(product.price, product.selling_unit, product.selling_unit_value)}</p>
+                                    </div>
                                     {product.stock_quantity > 0 && (
                                         <button
-                                            onClick={() => onAddToCart?.(product)}
+                                            onClick={(e) => { e.stopPropagation(); onAddToCart?.(product); }}
                                             style={{ borderColor: primaryColor, color: primaryColor }}
                                             className="border text-xs px-3 py-1.5 uppercase tracking-widest hover:bg-stone-900 hover:text-white hover:border-stone-900 transition-all font-sans"
                                         >

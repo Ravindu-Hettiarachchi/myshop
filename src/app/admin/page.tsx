@@ -136,7 +136,7 @@ export default function AdminOverviewPage() {
                         <div className="w-16 h-16 bg-gray-800 rounded-full flex items-center justify-center mb-4 border border-gray-700">
                             <CheckCircle className="w-8 h-8 text-green-500" />
                         </div>
-                        <p className="text-white font-bold text-lg mb-1">You're all caught up!</p>
+                        <p className="text-white font-bold text-lg mb-1">You&apos;re all caught up!</p>
                         <p className="text-gray-500 text-sm">There are no pending applications right now.</p>
                     </div>
                 ) : (

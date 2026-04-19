@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
         const invoiceUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/shop/${shopRoute}/invoice/${orderId}`;
         const trackingUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/shop/${shopRoute}/order/${orderId}`;
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const itemRows = (order.order_items || []).map((item: any) => `
             <tr>
                 <td style="padding:10px 16px;border-bottom:1px solid #f0f0f0;font-size:14px;color:#374151;">${item.products?.title || 'Product'}</td>
@@ -143,6 +144,7 @@ export async function POST(req: NextRequest) {
         await supabase.from('orders').update({ email_sent_at: new Date().toISOString() }).eq('id', orderId);
 
         return NextResponse.json({ success: true });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
         return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
     }

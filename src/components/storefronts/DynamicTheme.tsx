@@ -58,7 +58,8 @@ interface Product {
     selling_unit_value: number;
     selling_unit: ProductUnit;
     stock_quantity: number;
-    image_urls?: string[];
+    image_urls?: string[] | null;
+    compare_at_price?: number | null;
     image?: string;
 }
 
@@ -208,7 +209,10 @@ export default function DynamicTheme({
         }
         return (
             <button
-                onClick={onClick}
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onClick();
+                }}
                 disabled={disabled}
                 style={{ background: bg, color, border, borderRadius: btnRadius, fontSize: bodyFontSize(c.body_size) }}
                 className="px-4 py-2 font-bold transition hover:opacity-85 disabled:cursor-not-allowed whitespace-nowrap"
@@ -436,6 +440,7 @@ export default function DynamicTheme({
                             return (
                                 <div
                                     key={product.id}
+                                    onClick={() => onAddToCart(product)}
                                     style={{
                                         backgroundColor: cardBg,
                                         borderRadius: cardRadius,
@@ -449,7 +454,7 @@ export default function DynamicTheme({
                                                 : `1px solid rgba(${hex2rgb(c.text_color)},0.07)`,
                                         transition: 'box-shadow 0.25s, transform 0.25s',
                                     }}
-                                    className={`group flex flex-col overflow-hidden
+                                    className={`group flex flex-col overflow-hidden cursor-pointer
                                         ${c.card_hover === 'shadow' ? 'hover:shadow-2xl' : ''}
                                         ${c.card_hover === 'both'   ? 'hover:shadow-2xl' : ''}
                                     `}
@@ -477,6 +482,14 @@ export default function DynamicTheme({
                                                 Only {product.stock_quantity} left
                                             </span>
                                         )}
+                                        {product.compare_at_price != null && product.compare_at_price > product.price && (
+                                            <span
+                                                style={{ backgroundColor: c.accent_color }}
+                                                className="absolute top-3 right-3 text-white text-xs font-extrabold px-2.5 py-1 rounded-sm shadow-md"
+                                            >
+                                                {Math.round(((product.compare_at_price - product.price) / product.compare_at_price) * 100)}% OFF
+                                            </span>
+                                        )}
                                     </div>
 
                                     {/* Info */}
@@ -501,9 +514,16 @@ export default function DynamicTheme({
                                         )}
 
                                         <div className="flex items-center justify-between mt-auto pt-3 gap-2 flex-wrap">
-                                            <p style={{ color: c.accent_color, fontWeight: 800 }} className="text-base">
-                                                {formatPriceWithUnit(Number(product.price), product.selling_unit, product.selling_unit_value)}
-                                            </p>
+                                            <div>
+                                                {product.compare_at_price != null && product.compare_at_price > product.price && (
+                                                    <p style={{ color: `rgba(${hex2rgb(c.text_color)},0.4)` }} className="text-xs font-bold line-through">
+                                                        Rs. {Number(product.compare_at_price).toLocaleString()}
+                                                    </p>
+                                                )}
+                                                <p style={{ color: c.accent_color, fontWeight: 800 }} className="text-base">
+                                                    {formatPriceWithUnit(Number(product.price), product.selling_unit, product.selling_unit_value)}
+                                                </p>
+                                            </div>
                                             {renderBtn(outOfStock ? 'Sold Out' : 'Add to Cart', () => onAddToCart(product), outOfStock)}
                                         </div>
                                     </div>

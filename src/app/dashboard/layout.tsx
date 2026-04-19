@@ -16,6 +16,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const [displayName, setDisplayName] = useState('...');
     const [shopName, setShopName] = useState('');
     const [routePath, setRoutePath] = useState('');
+    const [verificationStatus, setVerificationStatus] = useState<string | null>(null);
     const [isAuthorized, setIsAuthorized] = useState(false);
     const [authChecked, setAuthChecked] = useState(false);
 
@@ -45,7 +46,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
             let shopQuery = supabase
                 .from('shops')
-                .select('shop_name, route_path')
+                .select('shop_name, route_path, verification_status')
                 .eq('owner_id', user.id)
                 .order('created_at', { ascending: false })
                 .limit(1);
@@ -58,6 +59,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             setDisplayName(owner?.full_name || user.email?.split('@')[0] || 'Shop Owner');
             setShopName(shop?.shop_name || '');
             setRoutePath(shop?.route_path || '');
+            setVerificationStatus(shop?.verification_status || 'unverified');
             setIsAuthorized(true);
             setAuthChecked(true);
         };
@@ -161,6 +163,28 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         <LogOut className="w-4 h-4" />
                     </button>
                 </header>
+
+                {verificationStatus === 'unverified' && (
+                    <div className="bg-rose-50 border-b border-rose-100 p-3 flex flex-col sm:flex-row justify-between items-center text-sm gap-2 z-10 sticky top-0 md:top-0">
+                        <p className="text-rose-800 font-medium whitespace-normal">Finish the verification process to go live.</p>
+                        <Link href="/dashboard/settings/verification" className="bg-rose-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-sm shadow-rose-200 hover:bg-rose-700 transition">
+                            Verify Now
+                        </Link>
+                    </div>
+                )}
+                {verificationStatus === 'pending' && (
+                    <div className="bg-amber-50 border-b border-amber-100 p-3 flex justify-center items-center text-sm z-10 sticky top-0 md:top-0">
+                        <p className="text-amber-800 font-medium">Verification is pending. Our admins will verify your shop shortly.</p>
+                    </div>
+                )}
+                {verificationStatus === 'rejected' && (
+                    <div className="bg-red-600 text-white p-3 flex flex-col sm:flex-row justify-between items-center text-sm gap-2 z-10 sticky top-0 md:top-0">
+                        <p className="font-medium whitespace-normal">Your verification was rejected. Please resubmit valid details.</p>
+                        <Link href="/dashboard/settings/verification" className="bg-white text-red-600 px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-100 transition">
+                            Resubmit
+                        </Link>
+                    </div>
+                )}
 
                 <div className="flex-1 overflow-auto">
                     {children}

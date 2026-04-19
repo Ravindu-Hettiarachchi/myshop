@@ -6,6 +6,10 @@ import { buildStorefrontUrl, slugifyStorefrontLink, storefrontLinkSchema } from 
 const createShopSchema = z.object({
     shopName: z.string().trim().min(2, 'Shop name is required.'),
     routePath: z.string().trim().min(1, 'Storefront link is required.'),
+    is_verify_flow: z.boolean().optional(),
+    business_registration_no: z.string().optional(),
+    business_images: z.array(z.string()).optional(),
+    nic_files: z.array(z.string()).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -81,6 +85,10 @@ export async function POST(req: NextRequest) {
             shop_name: parsed.data.shopName.trim(),
             route_path: routePath,
             is_approved: false,
+            verification_status: parsed.data.is_verify_flow ? 'pending' : 'unverified',
+            business_registration_no: parsed.data.business_registration_no || null,
+            business_images: parsed.data.business_images || null,
+            nic_files: parsed.data.nic_files || null,
         };
 
         const { error: insertShopError } = await supabase.from('shops').insert([payload]);

@@ -11,7 +11,7 @@ const supabase = createClient(
 );
 
 async function run() {
-    const sql = fs.readFileSync('database/fix_checkout_rls_final.sql', 'utf8');
+    const sql = fs.readFileSync('database/add_verification_fields.sql', 'utf8');
 
     // As supabase-js v2 doesn't have a native .rpc('exec_sql') by default unless we created it,
     // we will just instruct the user to run it if we can't do it automatically.

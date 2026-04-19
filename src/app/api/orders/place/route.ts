@@ -13,6 +13,8 @@ interface PlaceOrderItem {
     selling_unit: ProductUnit;
     stock_quantity: number;
     stock_unit: ProductUnit;
+    variant_id?: string;
+    variant_title?: string;
 }
 
 interface PlaceOrderBody {
@@ -75,10 +77,10 @@ export async function POST(req: NextRequest) {
 
         const shopCustomerId = shopCustomer?.id ?? null;
 
-        const productIds = body.items.map((i) => i.id);
+        const productIds = Array.from(new Set(body.items.map((i) => i.id.split('-')[0])));
         const { data: products, error: productError } = await supabase
             .from('products')
-            .select('id, title, price, selling_unit_value, selling_unit, stock_quantity, stock_unit')
+            .select('id, title, price, selling_unit_value, selling_unit, stock_quantity, stock_unit, product_variants(*)')
             .eq('shop_id', body.shopId)
             .in('id', productIds);
 
@@ -87,17 +89,23 @@ export async function POST(req: NextRequest) {
         }
 
         const productMap = new Map((products || []).map((p) => [p.id, p]));
-        const stockUpdates: Array<{ id: string; nextStock: number }> = [];
+        const stockUpdates: Array<{ product_id: string; variant_id: string | null; delta: number }> = [];
 
         for (const item of body.items) {
-            const product = productMap.get(item.id);
+            const rawProductId = item.id.split('-')[0];
+            const product = productMap.get(rawProductId);
             if (!product) {
                 return NextResponse.json({ error: 'One or more products are no longer available.' }, { status: 400 });
             }
 
             const stockUnit = normalizeStockUnit(product.stock_unit as string | undefined);
             const sellingUnitValue = toNumber(product.selling_unit_value, 1);
-            const stockQuantity = toNumber(product.stock_quantity, 0);
+            
+            let stockQuantity = toNumber(product.stock_quantity, 0);
+            if (item.variant_id && product.product_variants) {
+                const variant = product.product_variants.find((v: { id: string; stock_quantity: number | string }) => v.id === item.variant_id);
+                if (variant) stockQuantity = toNumber(variant.stock_quantity, 0);
+            }
 
             const orderedQuantity = toNumber(item.orderedQuantity, sellingUnitValue * toNumber(item.quantityMultiplier, 1));
             const orderedUnit = normalizeSellingUnit((item.orderedUnit || product.selling_unit) as string | undefined);
@@ -107,19 +115,21 @@ export async function POST(req: NextRequest) {
 
             if (remainingStock < -1e-9) {
                 return NextResponse.json(
-                    { error: `${product.title} is out of stock for the selected quantity.` },
+                    { error: `${product.title} ${item.variant_title ? `(${item.variant_title}) ` : ''}is out of stock for the selected quantity.` },
                     { status: 400 }
                 );
             }
 
             stockUpdates.push({
-                id: product.id,
-                nextStock: Number(Math.max(0, remainingStock).toFixed(3)),
+                product_id: rawProductId,
+                variant_id: item.variant_id || null,
+                delta: -Number(requiredInStockUnit.toFixed(3)),
             });
         }
 
         const totalAmount = body.items.reduce((sum, item) => {
-            const product = productMap.get(item.id);
+            const rawProductId = item.id.split('-')[0];
+            const product = productMap.get(rawProductId);
             const unitPrice = toNumber(product?.price, toNumber(item.price));
             return sum + unitPrice * Math.max(1, Math.floor(toNumber(item.quantityMultiplier, 1)));
         }, 0);
@@ -171,7 +181,8 @@ export async function POST(req: NextRequest) {
         }
 
         const orderItems = body.items.map((item) => {
-            const product = productMap.get(item.id);
+            const rawProductId = item.id.split('-')[0];
+            const product = productMap.get(rawProductId);
             const multiplier = Math.max(1, Math.floor(toNumber(item.quantityMultiplier, 1)));
             const orderedQuantity = toNumber(item.orderedQuantity, toNumber(product?.selling_unit_value, 1) * multiplier);
             const orderedUnit = normalizeSellingUnit((item.orderedUnit || product?.selling_unit) as string | undefined);
@@ -179,7 +190,7 @@ export async function POST(req: NextRequest) {
 
             return {
                 order_id: orderData.id,
-                product_id: item.id,
+                product_id: rawProductId,
                 quantity: multiplier,
                 unit_price: unitPrice,
                 total_price: unitPrice * multiplier,
@@ -192,12 +203,15 @@ export async function POST(req: NextRequest) {
 
         let { error: itemsError } = await supabase.from('order_items').insert(orderItems);
         if (itemsError && /ordered_quantity|ordered_unit|selling_unit_value|selling_unit|total_price/i.test(itemsError.message)) {
-            const fallbackItems = body.items.map((item) => ({
-                order_id: orderData.id,
-                product_id: item.id,
-                quantity: Math.max(1, Math.floor(toNumber(item.quantityMultiplier, 1))),
-                unit_price: toNumber(productMap.get(item.id)?.price, item.price),
-            }));
+            const fallbackItems = body.items.map((item) => {
+                const rawProductId = item.id.split('-')[0];
+                return {
+                    order_id: orderData.id,
+                    product_id: rawProductId,
+                    quantity: Math.max(1, Math.floor(toNumber(item.quantityMultiplier, 1))),
+                    unit_price: toNumber(productMap.get(rawProductId)?.price, item.price),
+                };
+            });
 
             const fallbackInsert = await supabase.from('order_items').insert(fallbackItems);
             itemsError = fallbackInsert.error;
@@ -208,11 +222,13 @@ export async function POST(req: NextRequest) {
         }
 
         for (const stockUpdate of stockUpdates) {
-            const { error: updateError } = await supabase
-                .from('products')
-                .update({ stock_quantity: stockUpdate.nextStock })
-                .eq('id', stockUpdate.id)
-                .eq('shop_id', body.shopId);
+            const { error: updateError } = await supabase.rpc('adjust_stock', {
+                p_product_id: stockUpdate.product_id,
+                p_delta: stockUpdate.delta,
+                p_reason: 'ORDER_PLACED',
+                p_reference_id: orderData.id,
+                p_variant_id: stockUpdate.variant_id
+            });
 
             if (updateError) {
                 return NextResponse.json({ error: updateError.message }, { status: 400 });

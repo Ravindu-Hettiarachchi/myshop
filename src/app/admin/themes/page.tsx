@@ -123,9 +123,13 @@ export default function AdminThemesPage() {
         setLoading(false);
     }, [supabase]);
 
-    useEffect(() => { fetchThemes(); }, [fetchThemes]);
+     
+    useEffect(() => {
+        const load = async () => { await fetchThemes(); };
+        load();
+    }, [fetchThemes]);
 
-    const set = (key: string, val: any) => setCustomForm(f => ({ ...f, [key]: val }));
+    const set = (key: string, val: string | number | boolean) => setCustomForm(f => ({ ...f, [key]: val }));
 
     const handleToggle = async (theme: Theme) => {
         const updated = !theme.is_active;

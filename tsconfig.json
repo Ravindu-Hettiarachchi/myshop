@@ -41,6 +41,7 @@
     "**/node_modules",
     "frontend",
     "backend",
-    "src 3"
+    "src 3",
+    "src copy"
   ]
 }

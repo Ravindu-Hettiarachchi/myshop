@@ -11,6 +11,7 @@ interface Product {
     selling_unit: ProductUnit;
     stock_quantity: number;
     image_urls: string[] | null;
+    compare_at_price?: number | null;
 }
 
 interface ShopConfig {
@@ -38,8 +39,12 @@ interface Props {
 
 export default function VibrantMarket({ shop, products, onAddToCart, cartCount = 0, onOpenCart, sessionUser, customerDisplayName, onLogout }: Props) {
     const primaryColor = shop.primary_color || '#F59E0B';
-    const featured = products.slice(0, 4);
-    const rest = products.slice(4);
+    const saleItems = products.filter(p => p.compare_at_price != null && p.compare_at_price > p.price);
+    const saleFeatured = saleItems.slice(0, 4);
+    // Don't show sale items in the standard featured list to avoid duplication on homepage
+    const nonSaleProducts = products.filter(p => p.compare_at_price == null || p.compare_at_price <= p.price);
+    const featured = nonSaleProducts.slice(0, 4);
+    const rest = nonSaleProducts.slice(4);
 
     return (
         <div style={{ fontFamily: `'${shop.font}', sans-serif` }} className="min-h-screen bg-white text-gray-900">
@@ -172,6 +177,70 @@ export default function VibrantMarket({ shop, products, onAddToCart, cartCount =
                 </div>
             </section>
 
+            {/* Flash Sales */}
+            {saleFeatured.length > 0 && (
+                <section id="sale" className="max-w-7xl mx-auto px-5 lg:px-10 py-16">
+                    <div className="flex items-end justify-between mb-8">
+                        <div>
+                            <p className="text-xs font-extrabold text-red-500 uppercase tracking-widest mb-1 flex items-center gap-1.5 animate-pulse">
+                                <Sparkles className="w-3.5 h-3.5" />
+                                Limited Time
+                            </p>
+                            <h2 className="text-2xl font-extrabold text-gray-900">Flash Sale</h2>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {saleFeatured.map((product) => {
+                            const isSale = product.compare_at_price != null && product.compare_at_price > product.price;
+                            const discountPercent = isSale ? Math.round(((product.compare_at_price! - product.price) / product.compare_at_price!) * 100) : 0;
+                            return (
+                                <div key={product.id} onClick={() => onAddToCart?.(product)} className="relative group cursor-pointer bg-white border-2 border-red-100/50 rounded-3xl overflow-hidden hover:shadow-2xl hover:-translate-y-1 transition-all duration-300" onMouseEnter={(e) => e.currentTarget.style.borderColor = '#ef444450'} onMouseLeave={(e) => e.currentTarget.style.borderColor = ''}>
+                                    <div className="aspect-square bg-gray-50 relative overflow-hidden">
+                                        {/* Sale Badge */}
+                                        <div className="absolute top-3 right-3 z-10 bg-red-500 text-white shadow-lg text-xs font-extrabold px-3 py-1.5 rounded-full flex items-center gap-1">
+                                            {discountPercent}% OFF
+                                        </div>
+
+                                        {product.image_urls?.[0] ? (
+                                            <img src={product.image_urls[0]} alt={product.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center">
+                                                <ShoppingBag className="w-10 h-10 text-gray-200" strokeWidth={1} />
+                                            </div>
+                                        )}
+                                        {product.stock_quantity === 0 && (
+                                            <div className="absolute inset-0 bg-white/75 flex items-center justify-center z-10">
+                                                <span className="text-xs font-extrabold text-gray-400 uppercase tracking-widest">Sold Out</span>
+                                            </div>
+                                        )}
+                                        {product.stock_quantity > 0 && product.stock_quantity <= 5 && (
+                                            <span className="absolute top-3 left-3 bg-orange-500 text-white z-10 text-xs font-extrabold px-2 py-0.5 rounded-full">🔥 {product.stock_quantity} left</span>
+                                        )}
+                                    </div>
+                                    <div className="p-4 bg-red-50/10">
+                                        <p className="font-extrabold text-gray-900 text-sm truncate mb-0.5">{product.title}</p>
+                                        {product.description && <p className="text-xs text-gray-400 line-clamp-1 mb-3">{product.description}</p>}
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <span className="text-base font-extrabold text-red-600 space-x-1 block leading-tight">{formatPriceWithUnit(product.price, product.selling_unit, product.selling_unit_value)}</span>
+                                                <span className="text-xs font-bold text-gray-400 line-through">Rs. {Number(product.compare_at_price).toLocaleString()}</span>
+                                            </div>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); onAddToCart?.(product); }}
+                                                disabled={product.stock_quantity === 0}
+                                                className={`text-xs font-extrabold px-3 py-1.5 rounded-xl transition ${product.stock_quantity > 0 ? 'bg-red-500 text-white hover:bg-red-600 shadow-sm shadow-red-500/20' : 'bg-gray-100 text-gray-300 cursor-not-allowed'}`}
+                                            >
+                                                + Add
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </section>
+            )}
+
             {/* Featured */}
             {featured.length > 0 && (
                 <section id="products" className="max-w-7xl mx-auto px-5 lg:px-10 py-16">
@@ -187,7 +256,7 @@ export default function VibrantMarket({ shop, products, onAddToCart, cartCount =
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         {featured.map((product) => (
-                            <div key={product.id} className="group bg-white border-2 border-gray-100 rounded-3xl overflow-hidden hover:shadow-2xl hover:-translate-y-1 transition-all duration-300" onMouseEnter={(e) => e.currentTarget.style.borderColor = `${primaryColor}40`} onMouseLeave={(e) => e.currentTarget.style.borderColor = ''}>
+                            <div key={product.id} onClick={() => onAddToCart?.(product)} className="group cursor-pointer bg-white border-2 border-gray-100 rounded-3xl overflow-hidden hover:shadow-2xl hover:-translate-y-1 transition-all duration-300" onMouseEnter={(e) => e.currentTarget.style.borderColor = `${primaryColor}40`} onMouseLeave={(e) => e.currentTarget.style.borderColor = ''}>
                                 <div className="aspect-square bg-gray-50 relative overflow-hidden">
                                     {product.image_urls?.[0] ? (
                                         <img src={product.image_urls[0]} alt={product.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
@@ -209,9 +278,14 @@ export default function VibrantMarket({ shop, products, onAddToCart, cartCount =
                                     <p className="font-extrabold text-gray-900 text-sm truncate mb-0.5">{product.title}</p>
                                     {product.description && <p className="text-xs text-gray-400 line-clamp-1 mb-3">{product.description}</p>}
                                     <div className="flex items-center justify-between">
-                                        <span style={{ color: primaryColor }} className="text-base font-extrabold">{formatPriceWithUnit(product.price, product.selling_unit, product.selling_unit_value)}</span>
+                                        <div className="flex flex-col">
+                                            <span style={{ color: primaryColor }} className="text-base font-extrabold">{formatPriceWithUnit(product.price, product.selling_unit, product.selling_unit_value)}</span>
+                                            {product.compare_at_price != null && product.compare_at_price > product.price && (
+                                                <span className="text-xs font-bold text-gray-400 line-through">Rs. {Number(product.compare_at_price).toLocaleString()}</span>
+                                            )}
+                                        </div>
                                         <button
-                                            onClick={() => onAddToCart?.(product)}
+                                            onClick={(e) => { e.stopPropagation(); onAddToCart?.(product); }}
                                             disabled={product.stock_quantity === 0}
                                             style={{ backgroundColor: product.stock_quantity > 0 ? primaryColor : undefined }}
                                             className={`text-xs font-extrabold px-3 py-1.5 rounded-xl transition ${product.stock_quantity > 0 ? 'text-white hover:opacity-85' : 'bg-gray-100 text-gray-300 cursor-not-allowed'}`}
@@ -250,7 +324,7 @@ export default function VibrantMarket({ shop, products, onAddToCart, cartCount =
                     <h2 className="text-2xl font-extrabold text-gray-900 mb-8">All Products</h2>
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                         {rest.map((product) => (
-                            <div key={product.id} className="group bg-white border-2 border-gray-100 rounded-3xl overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300">
+                            <div key={product.id} onClick={() => onAddToCart?.(product)} className="group cursor-pointer bg-white border-2 border-gray-100 rounded-3xl overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300">
                                 <div className="aspect-square bg-gray-50 relative overflow-hidden">
                                     {product.image_urls?.[0] ? (
                                         <img src={product.image_urls[0]} alt={product.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
@@ -268,9 +342,14 @@ export default function VibrantMarket({ shop, products, onAddToCart, cartCount =
                                 <div className="p-3">
                                     <p className="font-extrabold text-gray-900 text-sm truncate mb-2">{product.title}</p>
                                     <div className="flex items-center justify-between">
-                                        <span style={{ color: primaryColor }} className="text-sm font-extrabold">{formatPriceWithUnit(product.price, product.selling_unit, product.selling_unit_value)}</span>
+                                        <div className="flex flex-col">
+                                            <span style={{ color: primaryColor }} className="text-sm font-extrabold">{formatPriceWithUnit(product.price, product.selling_unit, product.selling_unit_value)}</span>
+                                            {product.compare_at_price != null && product.compare_at_price > product.price && (
+                                                <span className="text-xs font-bold text-gray-400 line-through">Rs. {Number(product.compare_at_price).toLocaleString()}</span>
+                                            )}
+                                        </div>
                                         <button
-                                            onClick={() => onAddToCart?.(product)}
+                                            onClick={(e) => { e.stopPropagation(); onAddToCart?.(product); }}
                                             disabled={product.stock_quantity === 0}
                                             style={{ backgroundColor: product.stock_quantity > 0 ? primaryColor : undefined }}
                                             className={`text-xs font-extrabold px-3 py-1.5 rounded-xl transition ${product.stock_quantity > 0 ? 'text-white hover:opacity-85' : 'bg-gray-100 text-gray-300 cursor-not-allowed'}`}

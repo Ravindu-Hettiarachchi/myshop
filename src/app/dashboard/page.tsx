@@ -101,7 +101,11 @@ export default function DashboardOverview() {
         setLoading(false);
     }, [requestedSlug, supabase]);
 
-    useEffect(() => { fetchData(); }, [fetchData]);
+     
+    useEffect(() => {
+        const load = async () => { await fetchData(); };
+        load();
+    }, [fetchData]);
 
     if (loading) {
         return (

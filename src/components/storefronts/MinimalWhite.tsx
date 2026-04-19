@@ -7,10 +7,11 @@ interface Product {
     title: string;
     description: string | null;
     price: number;
+    compare_at_price?: number | null;
     selling_unit_value: number;
     selling_unit: ProductUnit;
     stock_quantity: number;
-    image_urls: string[] | null;
+    image_urls?: string[] | null;
 }
 
 interface ShopConfig {
@@ -39,6 +40,7 @@ interface Props {
 export default function MinimalWhite({ shop, products, onAddToCart, cartCount = 0, onOpenCart, sessionUser, customerDisplayName, onLogout }: Props) {
     const primaryColor = shop.primary_color || '#2563EB';
     const featured = products.slice(0, 4);
+    const saleItems = products.filter(p => p.compare_at_price != null && p.compare_at_price > p.price);
     const rest = products.slice(4);
 
     return (
@@ -199,7 +201,7 @@ export default function MinimalWhite({ shop, products, onAddToCart, cartCount = 
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         {featured.map((product) => (
-                            <div key={product.id} className="group bg-white border border-gray-100 rounded-2xl overflow-hidden hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+                            <div key={product.id} onClick={() => onAddToCart?.(product)} className="group cursor-pointer bg-white border border-gray-100 rounded-2xl overflow-hidden hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
                                 <div className="aspect-square bg-gray-50 relative overflow-hidden">
                                     {product.image_urls?.[0] ? (
                                         <img src={product.image_urls[0]} alt={product.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
@@ -214,16 +216,28 @@ export default function MinimalWhite({ shop, products, onAddToCart, cartCount = 
                                         </div>
                                     )}
                                     {product.stock_quantity > 0 && product.stock_quantity <= 5 && (
-                                        <span className="absolute top-2 left-2 bg-orange-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">Only {product.stock_quantity} left!</span>
+                                        <span className="absolute top-2 left-2 bg-orange-500 text-white text-xs font-bold px-2 py-0.5 rounded-full shadow-sm">Last {product.stock_quantity}!</span>
+                                    )}
+                                    {product.compare_at_price != null && product.compare_at_price > product.price && product.stock_quantity > 0 && (
+                                        <div className="absolute top-2 right-2 animate-pulse z-10 flex">
+                                            <span className="bg-red-500 text-white text-[10px] sm:text-xs font-black px-2.5 py-0.5 rounded-lg uppercase tracking-wider shadow-sm shadow-red-200">
+                                                {Math.round(((product.compare_at_price - product.price) / product.compare_at_price) * 100)}% OFF
+                                            </span>
+                                        </div>
                                     )}
                                 </div>
                                 <div className="p-4">
                                     <p className="font-semibold text-gray-900 text-sm truncate mb-0.5">{product.title}</p>
                                     {product.description && <p className="text-xs text-gray-400 line-clamp-1 mb-3">{product.description}</p>}
                                     <div className="flex items-center justify-between">
-                                        <span style={{ color: primaryColor }} className="text-base font-extrabold">{formatPriceWithUnit(product.price, product.selling_unit, product.selling_unit_value)}</span>
+                                        <div className="flex items-center gap-2">
+                                            <span style={{ color: primaryColor }} className="text-base font-extrabold">{formatPriceWithUnit(product.price, product.selling_unit, product.selling_unit_value)}</span>
+                                            {product.compare_at_price != null && product.compare_at_price > product.price && (
+                                                <span className="text-xs text-gray-400 line-through">Rs. {product.compare_at_price.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                            )}
+                                        </div>
                                         <button
-                                            onClick={() => onAddToCart?.(product)}
+                                            onClick={(e) => { e.stopPropagation(); onAddToCart?.(product); }}
                                             disabled={product.stock_quantity === 0}
                                             style={{ backgroundColor: product.stock_quantity > 0 ? primaryColor : undefined }}
                                             className={`text-xs font-bold px-3 py-1.5 rounded-lg transition ${product.stock_quantity > 0 ? 'text-white hover:opacity-85' : 'bg-gray-100 text-gray-300 cursor-not-allowed'}`}
@@ -254,6 +268,56 @@ export default function MinimalWhite({ shop, products, onAddToCart, cartCount = 
                 </section>
             )}
 
+            {saleItems.length > 0 && (
+                <section className="container mx-auto px-4 py-8 mb-16 relative">
+                    <div className="absolute inset-0 bg-red-50/40 -z-10 rounded-[2rem] mx-2"></div>
+                    <div className="flex items-center gap-3 mb-8 px-2">
+                        <h2 className="text-2xl font-black text-gray-900 tracking-tight">Flash Sale</h2>
+                        <span className="bg-red-500 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded-md tracking-widest animate-pulse shadow-sm shadow-red-200">Live Deals</span>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 px-2">
+                        {saleItems.map((product) => (
+                            <div key={product.id} onClick={() => onAddToCart?.(product)} className="group cursor-pointer bg-white border border-red-100 rounded-2xl overflow-hidden hover:shadow-xl hover:-translate-y-1 hover:border-red-200 transition-all duration-300">
+                                <div className="aspect-square bg-gray-50 relative overflow-hidden">
+                                    {product.image_urls?.[0] ? (
+                                        <img src={product.image_urls[0]} alt={product.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center">
+                                            <ShoppingBag className="w-10 h-10 text-gray-200" strokeWidth={1} />
+                                        </div>
+                                    )}
+                                    {product.stock_quantity === 0 ? (
+                                        <div className="absolute inset-0 bg-white/75 flex items-center justify-center">
+                                            <span className="text-xs font-bold text-gray-400 uppercase tracking-widest bg-white px-3 py-1 rounded-full border border-gray-200">Sold Out</span>
+                                        </div>
+                                    ) : (
+                                        <span className="absolute top-2 right-2 bg-red-500 text-white text-xs font-black px-2 py-0.5 rounded-lg uppercase tracking-wider shadow-sm shadow-red-200">-{Math.round((1 - (product.price / (product.compare_at_price||product.price))) * 100)}%</span>
+                                    )}
+                                </div>
+                                <div className="p-4">
+                                    <p className="font-semibold text-gray-900 text-sm truncate mb-0.5">{product.title}</p>
+                                    <div className="flex flex-col gap-2 mt-2">
+                                        <div className="flex items-center gap-2">
+                                            <span style={{ color: primaryColor }} className="text-lg font-black">{formatPriceWithUnit(product.price, product.selling_unit, product.selling_unit_value)}</span>
+                                            {product.compare_at_price != null && product.compare_at_price > product.price && (
+                                                <span className="text-xs text-red-300 line-through font-medium">Rs. {product.compare_at_price.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                            )}
+                                        </div>
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); onAddToCart?.(product); }}
+                                            disabled={product.stock_quantity === 0}
+                                            className={`text-xs font-bold w-full py-2 rounded-lg transition ${product.stock_quantity > 0 ? 'bg-red-500 text-white hover:bg-red-600 shadow-sm shadow-red-200' : 'bg-gray-100 text-gray-300 cursor-not-allowed'}`}
+                                        >
+                                            {product.stock_quantity > 0 ? 'Claim Deal' : 'Sold Out'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </section>
+            )}
+
             {/* All Products */}
             {rest.length > 0 && (
                 <section id="all-products" className="max-w-7xl mx-auto px-5 lg:px-10 py-16">
@@ -266,7 +330,7 @@ export default function MinimalWhite({ shop, products, onAddToCart, cartCount = 
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                         {rest.map((product) => (
-                            <div key={product.id} className="group bg-white border border-gray-100 rounded-2xl overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300">
+                            <div key={product.id} onClick={() => onAddToCart?.(product)} className="group cursor-pointer bg-white border border-gray-100 rounded-2xl overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300">
                                 <div className="aspect-square bg-gray-50 relative overflow-hidden">
                                     {product.image_urls?.[0] ? (
                                         <img src={product.image_urls[0]} alt={product.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
@@ -286,7 +350,7 @@ export default function MinimalWhite({ shop, products, onAddToCart, cartCount = 
                                     <div className="flex items-center justify-between">
                                         <span style={{ color: primaryColor }} className="text-sm font-extrabold">{formatPriceWithUnit(product.price, product.selling_unit, product.selling_unit_value)}</span>
                                         <button
-                                            onClick={() => onAddToCart?.(product)}
+                                            onClick={(e) => { e.stopPropagation(); onAddToCart?.(product); }}
                                             disabled={product.stock_quantity === 0}
                                             style={{ backgroundColor: product.stock_quantity > 0 ? primaryColor : undefined }}
                                             className={`text-xs font-bold px-3 py-1.5 rounded-lg transition ${product.stock_quantity > 0 ? 'text-white hover:opacity-85' : 'bg-gray-100 text-gray-300 cursor-not-allowed'}`}

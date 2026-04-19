@@ -10,6 +10,7 @@ interface Product {
     id: string;
     title: string;
     price: number;
+    compare_at_price?: number | null;
     stock_quantity: number;
     image: string;
     description: string;
@@ -23,6 +24,7 @@ export default function StorefrontLayout({ routePath }: { routePath: string }) {
     const router = useRouter();
     const supabase = createClient();
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [shopData, setShopData] = useState<any>(null);
     const [products, setProducts] = useState<Product[]>([]);
 
@@ -30,6 +32,7 @@ export default function StorefrontLayout({ routePath }: { routePath: string }) {
     const [isCartOpen, setIsCartOpen] = useState(false);
     const [isCheckingOut, setIsCheckingOut] = useState(false);
     const [customerEmail, setCustomerEmail] = useState('');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [sessionUser, setSessionUser] = useState<any>(null);
 
     useEffect(() => {
@@ -47,6 +50,7 @@ export default function StorefrontLayout({ routePath }: { routePath: string }) {
                 setShopData(dbShop);
                 // 2. Fetch real products for this shop
                 const { data: dbProducts } = await supabase.from('products').select('*').eq('shop_id', dbShop.id);
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 if (dbProducts) setProducts(dbProducts.map((p: any) => ({
                     id: p.id,
                     title: p.title,
@@ -402,7 +406,7 @@ export default function StorefrontLayout({ routePath }: { routePath: string }) {
                                                 {isCheckingOut ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Secure Checkout'}
                                             </button>
                                         )}
-                                        <p className={`text-xs text-center ${theme.textMuted}`}>By checking out, you agree to {shopName}'s Terms of Service.</p>
+                                        <p className={`text-xs text-center ${theme.textMuted}`}>By checking out, you agree to {shopName}&apos;s Terms of Service.</p>
                                     </form>
                                 </div>
                             )}

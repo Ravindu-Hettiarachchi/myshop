@@ -49,7 +49,7 @@ export default async function ShopPage({ params }: Props) {
     // Fetch products — both for approved shops (public) and for owner preview
     const { data: products } = await ownerSupabase
         .from('products')
-        .select('id, title, description, price, selling_unit_value, selling_unit, stock_quantity, stock_unit, image_urls, unit_value, unit')
+        .select('id, title, description, price, compare_at_price, selling_unit_value, selling_unit, stock_quantity, stock_unit, image_urls, unit_value, unit, has_variants, variation_options, product_variants(id, sku, options, price_override, compare_at_price, stock_quantity, image_url)')
         .eq('shop_id', shop.id)
         .order('created_at', { ascending: false });
 

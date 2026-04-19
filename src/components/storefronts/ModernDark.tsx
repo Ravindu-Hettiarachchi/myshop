@@ -7,6 +7,7 @@ interface Product {
     title: string;
     description: string | null;
     price: number;
+    compare_at_price?: number | null;
     selling_unit_value: number;
     selling_unit: ProductUnit;
     stock_quantity: number;
@@ -38,8 +39,9 @@ interface Props {
 
 export default function ModernDark({ shop, products, onAddToCart, cartCount = 0, onOpenCart, sessionUser, customerDisplayName, onLogout }: Props) {
     const primaryColor = shop.primary_color || '#7C3AED';
-    const featured = products.slice(0, 3);
-    const rest = products.slice(3);
+    const featured = products.slice(0, 4);
+    const saleItems = products.filter(p => p.compare_at_price != null && p.compare_at_price > p.price);
+    const rest = products.slice(4);
 
     return (
         <div style={{ fontFamily: `'${shop.font}', sans-serif` }} className="min-h-screen bg-[#080810] text-white">
@@ -181,7 +183,8 @@ export default function ModernDark({ shop, products, onAddToCart, cartCount = 0,
                         {featured.map((product, i) => (
                             <div
                                 key={product.id}
-                                className={`group relative rounded-2xl overflow-hidden border border-white/[0.06] hover:border-white/20 transition-all duration-300 ${i === 0 ? 'sm:row-span-1' : ''}`}
+                                onClick={() => onAddToCart?.(product)}
+                                className={`group cursor-pointer relative rounded-2xl overflow-hidden border border-white/[0.06] hover:border-white/20 transition-all duration-300 ${i === 0 ? 'sm:row-span-1' : ''}`}
                             >
                                 <div className="aspect-square bg-white/5 relative overflow-hidden">
                                     {product.image_urls?.[0] ? (
@@ -204,7 +207,7 @@ export default function ModernDark({ shop, products, onAddToCart, cartCount = 0,
                                     <div className="flex items-center justify-between">
                                         <span style={{ color: primaryColor }} className="text-base font-extrabold">{formatPriceWithUnit(product.price, product.selling_unit, product.selling_unit_value)}</span>
                                         <button
-                                            onClick={() => onAddToCart?.(product)}
+                                            onClick={(e) => { e.stopPropagation(); onAddToCart?.(product); }}
                                             disabled={product.stock_quantity === 0}
                                             style={{ backgroundColor: product.stock_quantity > 0 ? primaryColor : undefined }}
                                             className={`text-xs font-bold px-3 py-1.5 rounded-lg transition ${product.stock_quantity > 0 ? 'text-white hover:opacity-85' : 'bg-white/5 text-white/20 cursor-not-allowed'}`}
@@ -237,13 +240,73 @@ export default function ModernDark({ shop, products, onAddToCart, cartCount = 0,
                 </section>
             )}
 
+            {saleItems.length > 0 && (
+                <section className="max-w-7xl mx-auto px-6 py-12">
+                    <div className="flex items-center justify-between mb-8">
+                        <div className="flex items-center gap-3">
+                            <h2 className="text-3xl font-light text-white tracking-wide">Deals</h2>
+                            <span className="bg-indigo-500 text-white text-[10px] font-bold uppercase px-2 py-0.5 mt-1 animate-pulse">Ends Soon</span>
+                        </div>
+                        <div className="h-[1px] flex-1 bg-zinc-800 ml-8"></div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        {saleItems.map((product) => (
+                            <div key={product.id} onClick={() => onAddToCart?.(product)} className="group cursor-pointer bg-zinc-900 border border-indigo-900/40 hover:border-indigo-500/50 transition-all duration-500 rounded-none relative">
+                                <div className="aspect-[4/5] bg-zinc-800 relative overflow-hidden">
+                                    {product.image_urls?.[0] ? (
+                                        <img src={product.image_urls[0]} alt={product.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-90 group-hover:opacity-100" />
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center">
+                                            <ShoppingBag className="w-12 h-12 text-zinc-700" strokeWidth={1} />
+                                        </div>
+                                    )}
+                                    {product.stock_quantity === 0 ? (
+                                        <div className="absolute inset-0 bg-zinc-950/80 flex items-center justify-center backdrop-blur-sm">
+                                            <span className="text-xs font-medium text-zinc-400 uppercase tracking-[0.2em] border border-zinc-700 px-4 py-2">Sold Out</span>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {product.stock_quantity > 0 && product.stock_quantity <= 5 && (
+                                                <span className="absolute top-3 right-3 bg-red-600 text-white text-[10px] font-bold px-2 py-1 uppercase tracking-widest">Last {product.stock_quantity}</span>
+                                            )}
+                                            {product.compare_at_price != null && product.compare_at_price > product.price && product.stock_quantity > 0 && (
+                                                <span className="absolute top-3 left-3 bg-indigo-500 text-white text-[10px] font-bold px-2 py-1 uppercase tracking-widest animate-pulse">Sale</span>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                                <div className="p-5">
+                                    <h3 className="font-medium text-white tracking-wide text-lg mb-1 truncate">{product.title}</h3>
+                                    {product.description && <p className="text-sm text-zinc-500 line-clamp-1 mb-4">{product.description}</p>}
+                                    <div className="flex flex-col gap-3 mt-3">
+                                        <div className="flex items-center gap-2">
+                                            <span style={{ color: primaryColor }} className="text-lg font-bold">{formatPriceWithUnit(product.price, product.selling_unit, product.selling_unit_value)}</span>
+                                            {product.compare_at_price != null && product.compare_at_price > product.price && (
+                                                <span className="text-xs text-zinc-600 line-through">Rs. {product.compare_at_price.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                            )}
+                                        </div>
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); onAddToCart?.(product); }}
+                                            disabled={product.stock_quantity === 0}
+                                            className={`text-[10px] tracking-widest uppercase font-bold w-full py-2.5 transition-all ${product.stock_quantity > 0 ? 'bg-indigo-500 hover:bg-indigo-600 text-white shadow-[0_0_15px_rgba(99,102,241,0.3)]' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}`}
+                                        >
+                                            {product.stock_quantity > 0 ? 'Claim Deal' : 'Sold'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </section>
+            )}
+
             {/* All Products */}
             {rest.length > 0 && (
                 <section id="all" className="max-w-7xl mx-auto px-5 lg:px-10 py-16">
                     <h2 className="text-2xl font-extrabold text-white mb-8">All Products</h2>
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                         {rest.map((product) => (
-                            <div key={product.id} className="group bg-white/[0.03] border border-white/[0.06] rounded-2xl overflow-hidden hover:border-white/15 transition-all duration-300">
+                            <div key={product.id} onClick={() => onAddToCart?.(product)} className="group cursor-pointer bg-white/[0.03] border border-white/[0.06] rounded-2xl overflow-hidden hover:border-white/15 transition-all duration-300">
                                 <div className="aspect-square bg-white/5 overflow-hidden relative">
                                     {product.image_urls?.[0] ? (
                                         <img src={product.image_urls[0]} alt={product.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 opacity-80 group-hover:opacity-100" />
@@ -263,7 +326,7 @@ export default function ModernDark({ shop, products, onAddToCart, cartCount = 0,
                                     <div className="flex items-center justify-between">
                                         <span style={{ color: primaryColor }} className="text-sm font-extrabold">{formatPriceWithUnit(product.price, product.selling_unit, product.selling_unit_value)}</span>
                                         <button
-                                            onClick={() => onAddToCart?.(product)}
+                                            onClick={(e) => { e.stopPropagation(); onAddToCart?.(product); }}
                                             disabled={product.stock_quantity === 0}
                                             style={{ backgroundColor: product.stock_quantity > 0 ? primaryColor : undefined }}
                                             className={`text-xs font-bold px-3 py-1.5 rounded-lg transition ${product.stock_quantity > 0 ? 'text-white hover:opacity-85' : 'bg-white/5 text-white/20 cursor-not-allowed'}`}

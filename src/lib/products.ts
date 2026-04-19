@@ -97,23 +97,40 @@ export function formatPriceWithUnit(
     sellingUnit: string | null | undefined,
     sellingUnitValue: number | string | null | undefined
 ): string {
-    return `Rs. ${Number(price).toLocaleString()} / ${formatUnitValue(sellingUnitValue)}${getUnitLabel(sellingUnit)}`;
+    return `Rs. ${Number(price).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
 }
 
 export function formatStockWithUnit(stockQuantity: number, stockUnit: string | null | undefined): string {
     return `${Number(stockQuantity).toLocaleString()}${getUnitLabel(stockUnit)}`;
 }
 
+export const variantSchema = z.object({
+    id: z.string().optional(),
+    sku: z.string().optional().nullable().or(z.literal('')),
+    options: z.record(z.string(), z.string()),
+    price_override: z.coerce.number().optional().nullable(),
+    compare_at_price: z.coerce.number().optional().nullable(),
+    stock_quantity: z.coerce.number().min(0).default(0),
+    image_url: z.string().url().optional().nullable().or(z.literal('')),
+});
+
 export const productUpsertSchema = z.object({
     title: z.string().trim().min(1, 'Product title is required.'),
     description: z.string().optional().default(''),
     price: z.coerce.number().gt(0, 'Price must be greater than 0.'),
+    compare_at_price: z.coerce.number().optional().nullable(),
     selling_unit_value: z.coerce.number().gt(0, 'Selling unit value must be greater than 0.'),
     selling_unit: z.enum(PRODUCT_UNITS, { error: 'Selling unit is required.' }),
     stock_quantity: z.coerce.number().min(0, 'Stock quantity cannot be negative.'),
     stock_unit: z.enum(PRODUCT_UNITS, { error: 'Stock unit is required.' }),
     low_stock_threshold: z.coerce.number().min(0, 'Low stock threshold cannot be negative.'),
     image_urls: z.array(z.string().url()).default([]),
+    has_variants: z.boolean().default(false),
+    variation_options: z.array(z.object({
+        name: z.string(),
+        values: z.array(z.string())
+    })).default([]),
+    variants: z.array(variantSchema).default([]),
 });
 
 export type ProductUpsertInput = z.infer<typeof productUpsertSchema>;

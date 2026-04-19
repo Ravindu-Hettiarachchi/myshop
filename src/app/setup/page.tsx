@@ -175,14 +175,19 @@ export default function SetupInstructionPage() {
 
             {/* Sticky Bottom Action Bar */}
             <div className="fixed bottom-0 w-full bg-white border-t border-gray-200 p-4 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] z-20">
-                <div className="max-w-4xl mx-auto flex items-center justify-between">
+                <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
                     <div>
-                        <p className="text-sm font-bold text-gray-900 hidden sm:block">Ready to begin?</p>
-                        <p className="text-xs text-gray-500 hidden sm:block">You will be redirected to the secure setup wizard.</p>
+                        <p className="text-sm font-bold text-gray-900 hidden md:block">Ready to begin?</p>
+                        <p className="text-xs text-gray-500 hidden md:block">You can verify your business now or skip it for later.</p>
                     </div>
-                    <Link href="/onboarding" className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-base shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 transition-all hover:scale-[1.02]">
-                        Start Creating Shop <ArrowRight className="w-5 h-5" />
-                    </Link>
+                    <div className="flex w-full sm:w-auto flex-col sm:flex-row gap-3">
+                        <Link href="/onboarding" className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-xl font-bold text-sm shadow-sm transition-all focus:ring-2 focus:ring-gray-200">
+                            Create Shop (Skip Verification)
+                        </Link>
+                        <Link href="/onboarding?verify=true" className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 transition-all hover:scale-[1.02]">
+                            Verify Business & Start <ArrowRight className="w-4 h-4" />
+                        </Link>
+                    </div>
                 </div>
             </div>
         </div>
