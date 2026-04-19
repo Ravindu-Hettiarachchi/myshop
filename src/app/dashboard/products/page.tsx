@@ -59,6 +59,7 @@ interface ProductFormState {
     low_stock_threshold: string;
     image_urls: string[];
     has_variants: boolean;
+    use_global_price: boolean;
     variation_options: { name: string; raw_values: string }[];
     variants: VariantState[];
 }
@@ -82,7 +83,7 @@ export default function ProductsDashboard() {
     const [primaryGrouping, setPrimaryGrouping] = useState<string>('');
     const [formData, setFormData] = useState<ProductFormState>({
         title: '', description: '', price: '', compare_at_price: '', selling_unit_value: DEFAULT_UNIT_VALUE.toString(), selling_unit: DEFAULT_PRODUCT_UNIT, stock_quantity: '0', stock_unit: DEFAULT_STOCK_UNIT, low_stock_threshold: '5', image_urls: [],
-        has_variants: false, variation_options: [], variants: []
+        has_variants: false, use_global_price: true, variation_options: [], variants: []
     });
     
     // UI Sale Maker State
@@ -228,11 +229,12 @@ export default function ProductsDashboard() {
             // Convert legacy generic array back to raw_values
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             variation_options: (product.variation_options || []).map((o: any) => ({ name: o.name, raw_values: Array.isArray(o.values) ? o.values.join(', ') : o.values || o.raw_values || '' })),
-            variants: (product.product_variants || []).map(v => ({ ...v, price_override: v.price_override ? String(v.price_override) : '', compare_at_price: v.compare_at_price ? String(v.compare_at_price) : '', stock_quantity: String(v.stock_quantity || 0), image_url: v.image_url || '' }))
+            variants: (product.product_variants || []).map(v => ({ ...v, price_override: v.price_override ? String(v.price_override) : '', compare_at_price: v.compare_at_price ? String(v.compare_at_price) : '', stock_quantity: String(v.stock_quantity || 0), image_url: v.image_url || '' })),
+            use_global_price: product.product_variants && product.product_variants.length > 0 ? product.product_variants.every(v => !v.price_override) : true
         } : {
             title: '', description: '', price: '', compare_at_price: '', selling_unit_value: DEFAULT_UNIT_VALUE.toString(), selling_unit: DEFAULT_PRODUCT_UNIT,
             stock_quantity: '0', stock_unit: DEFAULT_STOCK_UNIT, low_stock_threshold: '5', image_urls: [],
-            has_variants: false, variation_options: [], variants: []
+            has_variants: false, use_global_price: true, variation_options: [], variants: []
         });
         setIsModalOpen(true);
     };
@@ -368,10 +370,15 @@ export default function ProductsDashboard() {
                 values: o.raw_values.split(',').map(s => s.trim()).filter(Boolean)
             })).filter(o => o.name && o.values.length > 0);
 
+            const finalVariants = formData.use_global_price 
+                ? formData.variants.map(v => ({...v, price_override: '', compare_at_price: ''}))
+                : formData.variants;
+
             const parsed = productUpsertSchema.safeParse({
                 ...formData,
                 image_urls: formData.image_urls.filter(u => u.trim() !== ''),
                 variation_options: mappedVariationOptions,
+                variants: finalVariants
             });
 
             if (!parsed.success) {
@@ -896,6 +903,15 @@ export default function ProductsDashboard() {
 
                                             return (
                                                 <div className="space-y-4">
+                                                    <div className="flex items-start sm:items-center gap-3 bg-gray-50/50 p-3.5 rounded-xl border border-gray-200 shadow-sm transition hover:border-blue-200 cursor-pointer" onClick={() => setFormData(p => ({ ...p, use_global_price: !p.use_global_price }))}>
+                                                        <div className="pt-0.5 sm:pt-0">
+                                                            <input type="checkbox" checked={formData.use_global_price} readOnly className="w-4 h-4 text-blue-600 rounded border-gray-300 pointer-events-none" />
+                                                        </div>
+                                                        <div className="flex flex-col">
+                                                            <span className="text-sm font-semibold text-gray-800">Use one global price for all variations</span>
+                                                            <span className="text-xs text-gray-500 mt-0.5">If checked, variants inherit the basic price from the Pricing Strategy box</span>
+                                                        </div>
+                                                    </div>
                                                     {availableKeys.length > 1 && (
                                                         <div className="flex items-center gap-3 bg-blue-50/50 p-3 rounded-xl border border-blue-100 shadow-sm">
                                                             <label className="text-sm font-semibold text-blue-900">Main Grouping:</label>
@@ -918,8 +934,8 @@ export default function ProductsDashboard() {
                                                                 {formData.image_urls.length > 0 && <th className="px-4 py-3 font-semibold">Image</th>}
                                                                 <th className="px-4 py-3 font-semibold">{otherOptionKeys.length > 0 ? otherOptionKeys.join(' / ') : 'Variant'}</th>
                                                                 <th className="px-4 py-3 font-semibold border-l border-gray-100 text-blue-700">Stock Qty *</th>
-                                                                <th className="px-4 py-3 font-semibold border-l border-gray-100">Price Override</th>
-                                                                <th className="px-4 py-3 font-semibold border-l border-gray-100">Compare At</th>
+                                                                {!formData.use_global_price && <th className="px-4 py-3 font-semibold border-l border-gray-100">Price Override</th>}
+                                                                {!formData.use_global_price && <th className="px-4 py-3 font-semibold border-l border-gray-100">Compare At</th>}
                                                                 <th className="px-4 py-3 font-semibold border-l border-gray-100">SKU</th>
                                                             </tr>
                                                         </thead>
@@ -992,8 +1008,10 @@ export default function ProductsDashboard() {
                                                                                             <CheckCircle2 className="w-3 h-3" />
                                                                                         </button>
                                                                                     </div>
-                                                                                    <div className="flex bg-gray-50 rounded border border-gray-200 overflow-hidden">
-                                                                                        <input type="number" placeholder="Price..." className="w-16 px-2 py-1.5 text-xs outline-none bg-transparent" 
+                                                                                    {!formData.use_global_price && (
+                                                                                        <>
+                                                                                            <div className="flex bg-gray-50 rounded border border-gray-200 overflow-hidden">
+                                                                                                <input type="number" placeholder="Price..." className="w-16 px-2 py-1.5 text-xs outline-none bg-transparent" 
                                                                                             onKeyDown={(e) => {
                                                                                                 if (e.key === 'Enter') {
                                                                                                     e.preventDefault();
@@ -1052,6 +1070,8 @@ export default function ProductsDashboard() {
                                                                                             <CheckCircle2 className="w-3 h-3" />
                                                                                         </button>
                                                                                     </div>
+                                                                                        </>
+                                                                                    )}
                                                                                 </div>
                                                                             </div>
                                                                         </td>
@@ -1084,9 +1104,11 @@ export default function ProductsDashboard() {
                                                                                     setFormData({...formData, variants: next});
                                                                                 }} className="w-20 px-2.5 py-1.5 border border-blue-200 bg-white rounded-lg outline-none focus:ring-2 focus:ring-blue-500/30" />
                                                                             </td>
-                                                                            <td className="px-4 py-2.5 border-l border-gray-100">
-                                                                                <div className="relative">
-                                                                                    <span className="absolute left-2.5 top-2 text-gray-400 text-xs">Rs.</span>
+                                                                            {!formData.use_global_price && (
+                                                                                <>
+                                                                                    <td className="px-4 py-2.5 border-l border-gray-100">
+                                                                                        <div className="relative">
+                                                                                            <span className="absolute left-2.5 top-2 text-gray-400 text-xs">Rs.</span>
                                                                                     <input type="number" placeholder="Optional" value={v.price_override} onChange={e => {
                                                                                         const next = [...formData.variants];
                                                                                         next[i].price_override = e.target.value;
@@ -1104,6 +1126,8 @@ export default function ProductsDashboard() {
                                                                                     }} className="w-24 pl-7 pr-2.5 py-1.5 border border-gray-200 rounded-lg outline-none focus:border-blue-400" />
                                                                                 </div>
                                                                             </td>
+                                                                                </>
+                                                                            )}
                                                                             <td className="px-4 py-2.5 border-l border-gray-100">
                                                                                 <input type="text" placeholder="e.g. SK-12" value={v.sku} onChange={e => {
                                                                                     const next = [...formData.variants];
