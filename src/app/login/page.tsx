@@ -3,99 +3,64 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import PlatformLogo from '@/components/PlatformLogo';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { Loader2 } from 'lucide-react';
-import { resolvePostLoginRedirect } from '@/lib/auth/redirects';
-
-const isValidEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
-
-function FieldError({ msg }: { msg?: string }) {
-    if (!msg) return null;
-    return <p className="text-xs text-red-500 mt-1">{msg}</p>;
-}
 
 export default function LoginPage() {
     const router = useRouter();
-    const searchParams = useSearchParams();
     const supabase = createClient();
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
-    const [serverError, setServerError] = useState<string | null>(null);
+    const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
-    const [touched, setTouched] = useState<{ email?: boolean; password?: boolean }>({});
-
-    const validate = () => {
-        const e: typeof errors = {};
-        if (!email.trim()) e.email = 'Email is required.';
-        else if (!isValidEmail(email)) e.email = 'Enter a valid email address.';
-        if (!password) e.password = 'Password is required.';
-        return e;
-    };
-
-    const handleBlur = (field: 'email' | 'password') => {
-        setTouched(t => ({ ...t, [field]: true }));
-        setErrors(validate());
-    };
 
     const handleEmailLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        setServerError(null);
-        const errs = validate();
-        setErrors(errs);
-        setTouched({ email: true, password: true });
-        if (Object.keys(errs).length > 0) return;
-
+        setErrorMsg(null);
+        if (!email.trim() || !password) { setErrorMsg('Please fill in all fields.'); return; }
         setIsLoading(true);
-        const preferredPath = searchParams.get('next');
 
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
-        if (error) { setServerError(error.message); setIsLoading(false); return; }
-        if (!data.user?.id) { setServerError('Login succeeded but no user session was returned.'); setIsLoading(false); return; }
+        if (error) { setErrorMsg(error.message); setIsLoading(false); return; }
 
-        const { target } = await resolvePostLoginRedirect({
-            supabase,
-            userId: data.user.id,
-            preferredPath,
-        });
+        const { data: ownerData, error: ownerError } = await supabase.from('owners').select('role').eq('id', data.user.id).single();
+
+        if (ownerError) { console.error('Role fetch error:', ownerError.message); }
+
+        const role = ownerData?.role ?? 'shop_owner';
+
+        if (role === 'admin') {
+            setIsLoading(false);
+            router.push('/admin');
+            return;
+        }
+
+        const { data: shops } = await supabase.from('shops').select('id').eq('owner_id', data.user.id).limit(1);
         setIsLoading(false);
-        router.push(target);
+        router.push(!shops || shops.length === 0 ? '/setup' : '/dashboard');
     };
 
     const handleGoogleLogin = async () => {
-        const callbackUrl = new URL('/auth/callback', window.location.origin);
-        const preferredPath = searchParams.get('next');
-
-        if (preferredPath) {
-            callbackUrl.searchParams.set('next', preferredPath);
-        }
-
-        await supabase.auth.signInWithOAuth({
-            provider: 'google',
-            options: { redirectTo: callbackUrl.toString() },
-        });
+        await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: `${window.location.origin}/auth/callback` } });
     };
-
-    const inputCls = (field: 'email' | 'password') =>
-        `w-full px-4 py-3 border rounded-xl text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-1 transition bg-white ${touched[field] && errors[field]
-            ? 'border-red-400 focus:border-red-500 focus:ring-red-200'
-            : 'border-gray-200 focus:border-gray-900 focus:ring-gray-900'
-        }`;
 
     return (
         <div className="min-h-screen bg-gray-50 flex font-sans">
             {/* Left Panel - Branding */}
             <div className="hidden lg:flex flex-col w-[420px] p-12 relative overflow-hidden"
                 style={{ background: '#0F172A' }}>
+                {/* Subtle dot pattern */}
                 <div className="absolute inset-0" style={{
                     backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.06) 1px, transparent 1px)',
                     backgroundSize: '24px 24px'
                 }} />
+                {/* Blue glow blob */}
                 <div className="absolute top-20 right-0 w-64 h-64 rounded-full opacity-20 blur-3xl pointer-events-none" style={{ backgroundColor: '#3B82F6' }} />
                 <div className="absolute bottom-10 left-0 w-48 h-48 rounded-full opacity-10 blur-3xl pointer-events-none" style={{ backgroundColor: '#6366F1' }} />
+                {/* Content */}
                 <div className="relative z-10 flex flex-col h-full">
                     <PlatformLogo variant="full" className="h-8" />
                     <div className="flex-1 flex flex-col justify-center">
@@ -129,6 +94,7 @@ export default function LoginPage() {
                         <Link href="/signup" className="font-semibold text-gray-900 hover:underline">Get started free</Link>
                     </p>
 
+                    {/* Google */}
                     <button
                         type="button"
                         onClick={handleGoogleLogin}
@@ -149,10 +115,10 @@ export default function LoginPage() {
                         <div className="flex-1 h-px bg-gray-100" />
                     </div>
 
-                    <form className="space-y-4" onSubmit={handleEmailLogin} noValidate>
-                        {serverError && (
+                    <form className="space-y-4" onSubmit={handleEmailLogin}>
+                        {errorMsg && (
                             <div className="bg-red-50 border border-red-100 rounded-xl p-3">
-                                <p className="text-sm text-red-600">{serverError}</p>
+                                <p className="text-sm text-red-600">{errorMsg}</p>
                             </div>
                         )}
                         <div>
@@ -160,26 +126,20 @@ export default function LoginPage() {
                             <input
                                 type="email"
                                 value={email}
-                                onChange={(e) => { setEmail(e.target.value); if (touched.email) setErrors(v => ({ ...v, email: undefined })); }}
-                                onBlur={() => handleBlur('email')}
-                                className={inputCls('email')}
+                                onChange={(e) => setEmail(e.target.value)}
+                                className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900 transition bg-white"
                                 placeholder="you@business.com"
-                                autoComplete="email"
                             />
-                            <FieldError msg={touched.email ? errors.email : undefined} />
                         </div>
                         <div>
                             <label className="block text-xs font-semibold text-gray-600 mb-1.5">Password</label>
                             <input
                                 type="password"
                                 value={password}
-                                onChange={(e) => { setPassword(e.target.value); if (touched.password) setErrors(v => ({ ...v, password: undefined })); }}
-                                onBlur={() => handleBlur('password')}
-                                className={inputCls('password')}
+                                onChange={(e) => setPassword(e.target.value)}
+                                className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900 transition bg-white"
                                 placeholder="••••••••"
-                                autoComplete="current-password"
                             />
-                            <FieldError msg={touched.password ? errors.password : undefined} />
                         </div>
                         <div className="flex justify-end">
                             <a href="#" className="text-xs text-gray-400 hover:text-gray-700">Forgot password?</a>

@@ -1,28 +1,42 @@
 import { NextResponse } from 'next/server'
 // The client you created from the Server-Side Auth instructions
 import { createClient } from '@/utils/supabase/server'
-import { resolvePostLoginRedirect } from '@/lib/auth/redirects'
 
 export async function GET(request: Request) {
     const { searchParams, origin } = new URL(request.url)
     const code = searchParams.get('code')
-    const preferredPath = searchParams.get('next')
 
     // The previous default 'next' logic is overridden. OAuth needs dynamic routing.
-    let targetRoute = '/'
+    let targetRoute = '/dashboard'
 
     if (code) {
         const supabase = await createClient()
         const { data, error } = await supabase.auth.exchangeCodeForSession(code)
 
         if (!error && data?.user) {
-            const { target } = await resolvePostLoginRedirect({
-                supabase,
-                userId: data.user.id,
-                preferredPath,
-            })
 
-            targetRoute = target
+            // Replicate the login decision tree internally
+            const { data: ownerData } = await supabase
+                .from('owners')
+                .select('role')
+                .eq('id', data.user.id)
+                .single()
+
+            const role = ownerData?.role || 'shop_owner'
+
+            if (role === 'admin') {
+                // Admins always go to the admin panel
+                targetRoute = '/admin'
+            } else {
+                // Shop owners: check if they have a shop yet
+                const { data: shops } = await supabase
+                    .from('shops')
+                    .select('id')
+                    .eq('owner_id', data.user.id)
+                    .limit(1)
+
+                targetRoute = (!shops || shops.length === 0) ? '/setup' : '/dashboard'
+            }
 
             const forwardedHost = request.headers.get('x-forwarded-host')
             const isLocalEnv = process.env.NODE_ENV === 'development'
