@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
 
         const shopCustomerId = shopCustomer?.id ?? null;
 
-        const rawProductIds = body.items.map((i) => i.id.split('-')[0]);
+        const rawProductIds = body.items.map((i) => i.id.slice(0, 36));
         const invalidIds = rawProductIds.filter(id => !isUuid(id));
         if (invalidIds.length > 0) {
             return NextResponse.json({ error: 'Your cart contains invalid or outdated items. Please clear your cart and try again.' }, { status: 400 });
@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
         const stockUpdates: Array<{ product_id: string; variant_id: string | null; delta: number }> = [];
 
         for (const item of body.items) {
-            const rawProductId = item.id.split('-')[0];
+            const rawProductId = item.id.slice(0, 36);
             const product = productMap.get(rawProductId);
             if (!product) {
                 return NextResponse.json({ error: 'One or more products are no longer available.' }, { status: 400 });
@@ -168,7 +168,7 @@ export async function POST(req: NextRequest) {
         }
 
         const totalAmount = body.items.reduce((sum, item) => {
-            const rawProductId = item.id.split('-')[0];
+            const rawProductId = item.id.slice(0, 36);
             const product = productMap.get(rawProductId);
             const unitPrice = toNumber(product?.price, toNumber(item.price));
             return sum + unitPrice * Math.max(1, Math.floor(toNumber(item.quantityMultiplier, 1)));
@@ -237,7 +237,7 @@ export async function POST(req: NextRequest) {
         }
 
         const orderItems = body.items.map((item) => {
-            const rawProductId = item.id.split('-')[0];
+            const rawProductId = item.id.slice(0, 36);
             const product = productMap.get(rawProductId);
             const multiplier = Math.max(1, Math.floor(toNumber(item.quantityMultiplier, 1)));
             const orderedQuantity = toNumber(item.orderedQuantity, toNumber(product?.selling_unit_value, 1) * multiplier);
@@ -261,7 +261,7 @@ export async function POST(req: NextRequest) {
         let { error: itemsError } = await supabase.from('order_items').insert(orderItems);
         if (itemsError && /ordered_quantity|ordered_unit|selling_unit_value|selling_unit|total_price/i.test(itemsError.message)) {
             const fallbackItems = body.items.map((item) => {
-                const rawProductId = item.id.split('-')[0];
+                const rawProductId = item.id.slice(0, 36);
                 return {
                     id: item.cartItemId,
                     order_id: orderData.id,

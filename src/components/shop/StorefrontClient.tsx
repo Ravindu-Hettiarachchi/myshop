@@ -262,7 +262,7 @@ export default function StorefrontClient({ routePath, shopConfig, productList, s
     const updateItemMultiplier = (cartItemRowId: string, nextMultiplier: number) => {
         setCart(prev => prev.flatMap(item => {
             if (item.id !== cartItemRowId) return [item];
-            const originalProduct = products.find(p => p.id === (item.id.split('-')[0]) || p.id === item.id) || item;
+            const originalProduct = products.find(p => p.id === item.id.slice(0, 36) || p.id === item.id) || item;
             const originalVariant = item.variant_id && originalProduct.product_variants ? originalProduct.product_variants.find(v => v.id === item.variant_id) : undefined;
             
             const maxMultiplier = getMaxMultiplier(originalProduct, originalVariant);
