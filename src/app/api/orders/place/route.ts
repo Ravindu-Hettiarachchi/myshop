@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createCustomerServerClient } from '@/utils/supabase/customer-server';
 import { convertQuantity, normalizeStockUnit, normalizeSellingUnit, type ProductUnit } from '@/lib/products';
 import { hasShopCustomerLink } from '@/lib/auth/context';
+import { sanitizeAndValidateAddress } from '@/lib/checkout-validation';
 
 interface PlaceOrderItem {
     id: string;
@@ -15,18 +16,27 @@ interface PlaceOrderItem {
     stock_unit: ProductUnit;
     variant_id?: string;
     variant_title?: string;
+    cartItemId?: string;
 }
 
 interface PlaceOrderBody {
+    id: string; // generated order.id
     shopId: string;
     routePath?: string;
     paymentMethod: 'card' | 'cod';
     customer: {
+        id: string; // generated customer.id
         email: string;
         fullName: string;
-        address: string;
+        phone?: string;
+        houseNumber: string;
+        street: string;
         city: string;
+        district?: string;
+        province?: string;
         postalCode: string;
+        latitude?: number;
+        longitude?: number;
     };
     items: PlaceOrderItem[];
 }
@@ -36,11 +46,31 @@ function toNumber(value: unknown, fallback = 0): number {
     return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isUuid = (str: string) => uuidRegex.test(str);
+
 export async function POST(req: NextRequest) {
     try {
         const body = (await req.json()) as PlaceOrderBody;
         if (!body?.shopId || !Array.isArray(body.items) || body.items.length === 0) {
             return NextResponse.json({ error: 'Invalid order payload.' }, { status: 400 });
+        }
+
+        if (!isUuid(body.shopId)) {
+            return NextResponse.json({ error: 'Invalid shop ID.' }, { status: 400 });
+        }
+
+        // Backend address re-validation (security layer)
+        const addrCheck = sanitizeAndValidateAddress({
+            houseNo: body.customer.houseNumber ?? '',
+            streetAddress: body.customer.street ?? '',
+            city: body.customer.city ?? '',
+            district: body.customer.district ?? '',
+            province: body.customer.province ?? '',
+            postalCode: body.customer.postalCode ?? '',
+        });
+        if (!addrCheck.ok) {
+            return NextResponse.json({ error: addrCheck.error }, { status: 422 });
         }
 
     const supabase = await createCustomerServerClient();
@@ -77,7 +107,13 @@ export async function POST(req: NextRequest) {
 
         const shopCustomerId = shopCustomer?.id ?? null;
 
-        const productIds = Array.from(new Set(body.items.map((i) => i.id.split('-')[0])));
+        const rawProductIds = body.items.map((i) => i.id.split('-')[0]);
+        const invalidIds = rawProductIds.filter(id => !isUuid(id));
+        if (invalidIds.length > 0) {
+            return NextResponse.json({ error: 'Your cart contains invalid or outdated items. Please clear your cart and try again.' }, { status: 400 });
+        }
+
+        const productIds = Array.from(new Set(rawProductIds));
         const { data: products, error: productError } = await supabase
             .from('products')
             .select('id, title, price, selling_unit_value, selling_unit, stock_quantity, stock_unit, product_variants(*)')
@@ -96,6 +132,10 @@ export async function POST(req: NextRequest) {
             const product = productMap.get(rawProductId);
             if (!product) {
                 return NextResponse.json({ error: 'One or more products are no longer available.' }, { status: 400 });
+            }
+
+            if (item.variant_id && !isUuid(item.variant_id)) {
+                return NextResponse.json({ error: 'Your cart contains an invalid variant. Please clear your cart and try again.' }, { status: 400 });
             }
 
             const stockUnit = normalizeStockUnit(product.stock_unit as string | undefined);
@@ -135,14 +175,22 @@ export async function POST(req: NextRequest) {
         }, 0);
 
         const orderInsertPayload = {
+            id: body.id,
             shop_id: body.shopId,
             customer_auth_id: user.id,
             shop_customer_id: shopCustomerId,
             customer_email: user.email || body.customer.email,
             customer_name: body.customer.fullName,
-            customer_address: body.customer.address,
-            customer_city: body.customer.city,
+            customer_phone: body.customer.phone ?? null,
+            customer_house_no: body.customer.houseNumber,
+            customer_address: body.customer.street,
+            customer_street: body.customer.street,
+            customer_city: body.customer.city?.toUpperCase(),
+            customer_district: body.customer.district ?? null,
+            customer_province: body.customer.province ?? null,
             customer_postal: body.customer.postalCode,
+            delivery_lat: body.customer.latitude ?? null,
+            delivery_lng: body.customer.longitude ?? null,
             payment_method: body.paymentMethod,
             total_amount: totalAmount,
             status: 'processing',
@@ -159,12 +207,20 @@ export async function POST(req: NextRequest) {
                 .from('orders')
                 .insert([
                     {
+                        id: body.id,
                         shop_id: body.shopId,
                         customer_email: user.email || body.customer.email,
                         customer_name: body.customer.fullName,
-                        customer_address: body.customer.address,
-                        customer_city: body.customer.city,
+                        customer_phone: body.customer.phone ?? null,
+                        customer_house_no: body.customer.houseNumber,
+                        customer_address: body.customer.street,
+                        customer_street: body.customer.street,
+                        customer_city: body.customer.city?.toUpperCase(),
+                        customer_district: body.customer.district ?? null,
+                        customer_province: body.customer.province ?? null,
                         customer_postal: body.customer.postalCode,
+                        delivery_lat: body.customer.latitude ?? null,
+                        delivery_lng: body.customer.longitude ?? null,
                         payment_method: body.paymentMethod,
                         total_amount: totalAmount,
                         status: 'processing',
@@ -189,6 +245,7 @@ export async function POST(req: NextRequest) {
             const unitPrice = toNumber(product?.price, item.price);
 
             return {
+                id: item.cartItemId, // cartItem.id generated by frontend
                 order_id: orderData.id,
                 product_id: rawProductId,
                 quantity: multiplier,
@@ -206,6 +263,7 @@ export async function POST(req: NextRequest) {
             const fallbackItems = body.items.map((item) => {
                 const rawProductId = item.id.split('-')[0];
                 return {
+                    id: item.cartItemId,
                     order_id: orderData.id,
                     product_id: rawProductId,
                     quantity: Math.max(1, Math.floor(toNumber(item.quantityMultiplier, 1))),

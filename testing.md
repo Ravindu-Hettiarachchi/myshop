@@ -99,3 +99,32 @@ All URLs are on `http://localhost:3000`
 - Open two browser windows (one incognito) to test both roles simultaneously
 - After changing settings, always click **Save Changes** before previewing the storefront
 - The `/shop/[slug]` page is server-rendered — a hard refresh always shows the latest saved config
+
+## Checkout & Geolocation Testing
+
+### 1. Address Validation Tests
+- Try leaving "House No / Apartment / Landmark" empty and blur → Red error appears.
+- Try typing single letter "A" in House No → Allowed.
+- Try entering "123" without letters in "Street Name" → Error (min 2 chars).
+
+### 2. Map & Sync Tests
+- Click "Use Current Location" (browser prompt appears).
+- Map drops a pin exactly on coordinates.
+- "Location synced successfully" ✅ message appears.
+- Province, District, and City are automatically populated (matching Nominatim to Sri Lanka DB).
+- Postal code is filled (exactly 5 digits).
+
+### 3. Edge Cases
+- Drop pin in ocean → "Unable to detect location details. Please select manually."
+- Drop pin in deep village without city name mapping → District & Province filled, City remains blank, Sync banner says "Unable to detect: City ... Please select manually."
+- Checkout Button logic → Remains disabled until ALL fields (including house number, synced location, valid phone) are populated.
+
+
+### 4. Location Search Tests
+- Open map modal and type "Temple" or "Cargills" in the search bar.
+- Wait 500ms for debounced search to trigger.
+- Click a suggestion from the dropdown.
+- Verify map pin moves automatically to the searched location.
+- Verify "📍 Selected: [Place Name]" appears.
+- Confirm that the address fields (Province, District, City, etc.) sync correctly after selection.
+
