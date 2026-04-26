@@ -5,7 +5,7 @@ import Link from 'next/link';
 import PlatformLogo from '@/components/PlatformLogo';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
-import { Loader2, CheckCircle2 } from 'lucide-react';
+import { Loader2, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 
 const isValidEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
 
@@ -28,6 +28,8 @@ export default function SignupPage() {
     const [touched, setTouched] = useState<Partial<Record<Fields, boolean>>>({});
     const [serverError, setServerError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirm, setShowConfirm] = useState(false);
 
     const validate = () => {
         const e: typeof errors = {};
@@ -185,10 +187,15 @@ export default function SignupPage() {
                         {/* Password */}
                         <div>
                             <label className="block text-xs font-semibold text-gray-600 mb-1.5">Password</label>
-                            <input type="password" value={password}
-                                onChange={(e) => { setPassword(e.target.value); if (touched.password) setErrors(v => ({ ...v, password: undefined })); }}
-                                onBlur={() => handleBlur('password')}
-                                className={inputCls('password')} placeholder="Min. 8 characters" autoComplete="new-password" />
+                            <div className="relative">
+                                <input type={showPassword ? "text" : "password"} value={password}
+                                    onChange={(e) => { setPassword(e.target.value); if (touched.password) setErrors(v => ({ ...v, password: undefined })); }}
+                                    onBlur={() => handleBlur('password')}
+                                    className={inputCls('password') + " pr-10"} placeholder="Min. 8 characters" autoComplete="new-password" />
+                                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none">
+                                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                </button>
+                            </div>
                             {/* Strength meter */}
                             {password && (
                                 <div className="mt-1.5">
@@ -206,13 +213,18 @@ export default function SignupPage() {
                         <div>
                             <label className="block text-xs font-semibold text-gray-600 mb-1.5">Confirm Password</label>
                             <div className="relative">
-                                <input type="password" value={confirm}
+                                <input type={showConfirm ? "text" : "password"} value={confirm}
                                     onChange={(e) => { setConfirm(e.target.value); if (touched.confirm) setErrors(v => ({ ...v, confirm: undefined })); }}
                                     onBlur={() => handleBlur('confirm')}
-                                    className={inputCls('confirm')} placeholder="Repeat your password" autoComplete="new-password" />
-                                {confirm && confirm === password && (
-                                    <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-green-500" />
-                                )}
+                                    className={inputCls('confirm') + " pr-16"} placeholder="Repeat your password" autoComplete="new-password" />
+                                <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                                    <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="text-gray-400 hover:text-gray-600 focus:outline-none">
+                                        {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
+                                    {confirm && confirm === password && (
+                                        <CheckCircle2 className="w-4 h-4 text-green-500" />
+                                    )}
+                                </div>
                             </div>
                             <FieldError msg={touched.confirm ? errors.confirm : undefined} />
                         </div>

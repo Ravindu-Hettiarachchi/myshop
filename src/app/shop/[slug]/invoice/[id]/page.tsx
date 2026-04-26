@@ -138,8 +138,8 @@ export default async function InvoicePage({ params }: { params: Promise<{ slug: 
 
                 {/* Action Bar */}
                 <div className="mb-6 flex justify-between items-center hide-on-print print:hidden">
-                    <Link href={`/shop/${slug}/order/${id}`} className="text-sm font-medium text-gray-600 hover:text-gray-900 flex items-center gap-2 transition">
-                        ← Back to Order Tracker
+                    <Link href={`/shop/${slug}/account?track=${id}`} className="text-sm font-medium text-gray-600 hover:text-gray-900 flex items-center gap-2 transition">
+                        ← Back to My Account
                     </Link>
                     <div className="flex items-center gap-2">
                         <Link
@@ -332,16 +332,16 @@ export default async function InvoicePage({ params }: { params: Promise<{ slug: 
                                 </div>
                             )}
                             <div>
-                                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Order Tracker</p>
+                                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">My Account</p>
                                 <p className="text-gray-500 text-xs leading-relaxed mb-2">
-                                    Track the live status of your order at any time:
+                                    Manage your orders and track live status from your account:
                                 </p>
                                 <a
-                                    href={`/shop/${slug}/order/${id}`}
+                                    href={`/shop/${slug}/account`}
                                     className="text-xs font-mono underline break-all"
                                     style={{ color: accentColor }}
                                 >
-                                    {`/shop/${slug}/order/${id}`}
+                                    {`/shop/${slug}/account`}
                                 </a>
                             </div>
                         </div>

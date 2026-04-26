@@ -228,7 +228,9 @@ export default function StorefrontClient({ routePath, shopConfig, productList, s
         const requestedQuantity = normalizeUnitValue(product.selling_unit_value) * safeMultiplier;
 
         const cartItemId = activeVariant ? `${product.id}-${activeVariant.id}` : product.id;
-        const finalPrice = activeVariant?.price_override ?? product.price;
+        const finalPrice = (activeVariant?.price_override != null && activeVariant.price_override > 0) 
+            ? activeVariant.price_override 
+            : product.price;
 
         setCart(prev => {
             const existing = prev.find(item => item.id === cartItemId || (item.id === product.id && item.variant_id === activeVariant?.id));

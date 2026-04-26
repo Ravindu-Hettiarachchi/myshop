@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
-import { LayoutDashboard, Palette, Package as PackageIcon, LogOut, ShoppingBag, ExternalLink, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, Palette, Package as PackageIcon, LogOut, ShoppingBag, ExternalLink, ChevronRight, ShieldCheck } from 'lucide-react';
 import PlatformLogo from '@/components/PlatformLogo';
 import { buildStorefrontUrl } from '@/lib/storefront';
 
@@ -93,6 +93,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         { label: 'Products', href: '/dashboard/products', icon: PackageIcon },
         { label: 'Orders', href: '/dashboard/orders', icon: ShoppingBag },
         { label: 'Storefront', href: '/dashboard/settings', icon: Palette },
+        { label: 'Account', href: '/dashboard/account', icon: ShieldCheck },
     ];
 
     return (
@@ -108,7 +109,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <nav className="flex-1 px-3 py-5 space-y-0.5 overflow-y-auto">
                     <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest px-3 mb-3">Main Menu</p>
                     {navItems.map((item) => {
-                        const active = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
+                        const active = item.href === '/dashboard' ? pathname === '/dashboard' 
+                                     : item.href === '/dashboard/settings' ? pathname === '/dashboard/settings' || pathname.startsWith('/dashboard/settings/')
+                                     : pathname.startsWith(item.href);
                         return (
                             <Link
                                 key={item.href}
@@ -167,7 +170,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 {verificationStatus === 'unverified' && (
                     <div className="bg-rose-50 border-b border-rose-100 p-3 flex flex-col sm:flex-row justify-between items-center text-sm gap-2 z-10 sticky top-0 md:top-0">
                         <p className="text-rose-800 font-medium whitespace-normal">Finish the verification process to go live.</p>
-                        <Link href="/dashboard/settings/verification" className="bg-rose-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-sm shadow-rose-200 hover:bg-rose-700 transition">
+                        <Link href="/dashboard/account" className="bg-rose-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-sm shadow-rose-200 hover:bg-rose-700 transition">
                             Verify Now
                         </Link>
                     </div>
@@ -177,11 +180,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         <p className="text-amber-800 font-medium">Verification is pending. Our admins will verify your shop shortly.</p>
                     </div>
                 )}
-                {verificationStatus === 'rejected' && (
+                {verificationStatus?.startsWith('rejected') && (
                     <div className="bg-red-600 text-white p-3 flex flex-col sm:flex-row justify-between items-center text-sm gap-2 z-10 sticky top-0 md:top-0">
-                        <p className="font-medium whitespace-normal">Your verification was rejected. Please resubmit valid details.</p>
-                        <Link href="/dashboard/settings/verification" className="bg-white text-red-600 px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-100 transition">
-                            Resubmit
+                        <p className="font-medium whitespace-normal">Your verification was rejected. Please review account details and resubmit.</p>
+                        <Link href="/dashboard/account" className="bg-white text-red-600 px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-100 transition">
+                            View Status
                         </Link>
                     </div>
                 )}

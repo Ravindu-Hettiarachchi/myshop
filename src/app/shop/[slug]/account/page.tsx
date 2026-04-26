@@ -6,8 +6,15 @@ import { LogoutButton } from '@/components/shop/AccountClient';
 import CustomerOrdersClient from '@/components/shop/CustomerOrdersClient';
 import { hasShopCustomerLink } from '@/lib/auth/context';
 
-export default async function CustomerAccountPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function CustomerAccountPage({ 
+    params,
+    searchParams
+}: { 
+    params: Promise<{ slug: string }>;
+    searchParams: Promise<{ track?: string }>;
+}) {
     const { slug } = await params;
+    const { track } = await searchParams;
     const supabase = await createCustomerServerClient();
 
     const { data: shop } = await supabase.from('shops').select('*').eq('route_path', slug).single();
@@ -92,6 +99,7 @@ export default async function CustomerAccountPage({ params }: { params: Promise<
                                 initialOrders={orders}
                                 slug={slug}
                                 isDark={isDark}
+                                initialTrackOrderId={track}
                             />
                         )}
                     </div>

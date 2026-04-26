@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Package, Receipt, ArrowRight, Clock, Truck, CheckCircle, XCircle } from 'lucide-react';
 import { CancelOrderButton } from '@/components/shop/AccountClient';
+import OrderTrackerClient from '@/components/shop/OrderTrackerClient';
 
 interface Order {
     id: string;
@@ -25,15 +26,29 @@ export default function CustomerOrdersClient({
     initialOrders,
     slug,
     isDark,
+    initialTrackOrderId,
 }: {
     initialOrders: Order[];
     slug: string;
     isDark: boolean;
+    initialTrackOrderId?: string;
 }) {
     const [orders, setOrders] = useState<Order[]>(initialOrders);
+    const [trackOrderId, setTrackOrderId] = useState<string | null>(initialTrackOrderId || null);
 
     const cardCls = isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200';
     const mutedCls = isDark ? 'text-gray-400' : 'text-gray-500';
+
+    if (trackOrderId) {
+        return (
+            <OrderTrackerClient 
+                slug={slug} 
+                orderId={trackOrderId} 
+                onBack={() => setTrackOrderId(null)} 
+                isDark={isDark} 
+            />
+        );
+    }
 
     return (
         <div className="space-y-4">
@@ -98,13 +113,13 @@ export default function CustomerOrdersClient({
 
                                 {/* Track */}
                                 {order.status !== 'cancelled' && (
-                                    <Link
-                                        href={`/shop/${slug}/order/${order.id}`}
+                                    <button
+                                        onClick={() => setTrackOrderId(order.id)}
                                         className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-semibold transition"
                                     >
                                         Track Order
                                         <ArrowRight className="w-3.5 h-3.5" />
-                                    </Link>
+                                    </button>
                                 )}
                             </div>
                         </div>

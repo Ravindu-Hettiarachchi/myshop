@@ -5,7 +5,7 @@ import Link from 'next/link';
 import PlatformLogo from '@/components/PlatformLogo';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Eye, EyeOff } from 'lucide-react';
 
 export default function LoginPage() {
     const router = useRouter();
@@ -14,7 +14,9 @@ export default function LoginPage() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
+    const [successMsg, setSuccessMsg] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
 
     const handleEmailLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -45,6 +47,26 @@ export default function LoginPage() {
 
     const handleGoogleLogin = async () => {
         await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: `${window.location.origin}/auth/callback` } });
+    };
+
+    const handleForgotPassword = async (e: React.MouseEvent) => {
+        e.preventDefault();
+        setErrorMsg(null);
+        setSuccessMsg(null);
+        if (!email.trim()) {
+            setErrorMsg('Please enter your email first to reset your password.');
+            return;
+        }
+        setIsLoading(true);
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: `${window.location.origin}/dashboard/account`,
+        });
+        if (error) {
+            setErrorMsg(error.message);
+        } else {
+            setSuccessMsg('Password reset link sent! Check your email inbox.');
+        }
+        setIsLoading(false);
     };
 
     return (
@@ -121,6 +143,11 @@ export default function LoginPage() {
                                 <p className="text-sm text-red-600">{errorMsg}</p>
                             </div>
                         )}
+                        {successMsg && (
+                            <div className="bg-green-50 border border-green-100 rounded-xl p-3">
+                                <p className="text-sm text-green-600">{successMsg}</p>
+                            </div>
+                        )}
                         <div>
                             <label className="block text-xs font-semibold text-gray-600 mb-1.5">Email</label>
                             <input
@@ -133,16 +160,21 @@ export default function LoginPage() {
                         </div>
                         <div>
                             <label className="block text-xs font-semibold text-gray-600 mb-1.5">Password</label>
-                            <input
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900 transition bg-white"
-                                placeholder="••••••••"
-                            />
+                            <div className="relative">
+                                <input
+                                    type={showPassword ? "text" : "password"}
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900 transition bg-white pr-10"
+                                    placeholder="••••••••"
+                                />
+                                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none">
+                                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                </button>
+                            </div>
                         </div>
                         <div className="flex justify-end">
-                            <a href="#" className="text-xs text-gray-400 hover:text-gray-700">Forgot password?</a>
+                            <a href="#" onClick={handleForgotPassword} className="text-xs text-gray-400 hover:text-gray-700">Forgot password?</a>
                         </div>
                         <button
                             type="submit"
